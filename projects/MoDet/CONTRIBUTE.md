@@ -1,16 +1,25 @@
 
+#### A. Working with [PyTorch](https://pytorch.org/get-started/locally/) and [CUDA 10.1](https://www.tensorflow.org/install/gpu#install_cuda_with_apt)
 
+```
 
-#### Working with the Upstream GIT code [reference](https://stackoverflow.com/questions/7244321/how-do-i-update-a-github-forked-repository)
+```
 
-git clone git@github.com:vishwakarmarhl/detectron2.git
+#### B. Python [Virtual Environment Wrapper](https://medium.com/the-andela-way/configuring-python-environment-with-virtualenvwrapper-8745c2895745)
+
+``` 
+ mkvirtualenv det2 -p python3 
+ pip install -r requirements
+```
+
+#### C. Working with the Upstream GIT code [reference](https://stackoverflow.com/questions/7244321/how-do-i-update-a-github-forked-repository)
+
+```
+git clone https://github.com/vishwakarmarhl/detectron2
 cd detectron2
+```
 
-"""
-
-"""
-
-1. Add the "upstream" to your cloned repository ("origin"): https://github.com/facebookresearch/detectron2
+1. Add the "upstream" to your cloned repository ("origin"):
  ```git remote add upstream git@github.com:facebookresearch/detectron2.git```
 
 2. Fetch the commits (and branches) from the "upstream":

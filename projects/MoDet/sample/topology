@@ -1,0 +1,11 @@
+graph {
+	graph [bgcolor="#333333" fontcolor=white fontsize=16 label="Network Map" rankdir=BT]
+	node [color="#006699" fillcolor="#006699" fontcolor=white fontname=Helvetica margin=0.4 shape=box style=filled]
+	edge [arrowhead=open color=green fontcolor=white fontname=Courier fontsize=10 style=dashed]
+	HP_5500EI
+	Arista249
+	HP830_LSW
+	Arista249 -- HP830_LSW [label="            " headlabel=Ethernet47 taillabel="Gi1/0/12"]
+	Arista249 -- HP_5500EI [label="            " headlabel=Ethernet48 taillabel="Gi2/0/22"]
+	Arista249 -- HP_5500EI [label="            " headlabel=Management1 taillabel="Gi1/0/24"]
+}

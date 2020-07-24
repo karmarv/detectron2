@@ -11,7 +11,7 @@ from detectron2.config import get_cfg
 from detectron2.data.detection_utils import read_image
 from detectron2.utils.logger import setup_logger
 
-from predictor import VisualizationDemo
+from modet.utils.vis import VisualizationDemo
 
 # constants
 WINDOW_NAME = "COCO detections"
@@ -38,7 +38,7 @@ def get_parser():
         metavar="FILE",
         help="path to config file",
     )
-    parser.add_argument("--webcam", action="store_true", help="Take inputs from webcam.")
+    parser.add_argument("--webcam", help="Take inputs from webcam.")
     parser.add_argument("--video-input", help="Path to video file.")
     parser.add_argument(
         "--input",
@@ -51,7 +51,6 @@ def get_parser():
         help="A file or directory to save output visualizations. "
         "If not given, will show output in an OpenCV window.",
     )
-
     parser.add_argument(
         "--confidence-threshold",
         type=float,
@@ -110,10 +109,21 @@ if __name__ == "__main__":
                 cv2.imshow(WINDOW_NAME, visualized_output.get_image()[:, :, ::-1])
                 if cv2.waitKey(0) == 27:
                     break  # esc to quit
+
     elif args.webcam:
         assert args.input is None, "Cannot have both --input and --webcam!"
         assert args.output is None, "output not yet supported with --webcam!"
-        cam = cv2.VideoCapture(0)
+
+        if len(args.webcam) == 1:
+            print("Video Camera id  : ", args.webcam)
+            stream_identifier = int(args.webcam)
+        else:
+            print("Video Stream path: ", args.webcam)
+            stream_identifier = args.webcam #rtsp "http://192.168.0.29:8080/video"
+        exit()
+        
+        logger.info("Video frames from webcam")
+        cam = cv2.VideoCapture(stream_identifier)
         for vis in tqdm.tqdm(demo.run_on_video(cam)):
             cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
             cv2.imshow(WINDOW_NAME, vis)

@@ -7,6 +7,7 @@ detectron2==0.2
 
 future
 pydot
+graphviz
 tabulate
 cloudpickle
 matplotlib

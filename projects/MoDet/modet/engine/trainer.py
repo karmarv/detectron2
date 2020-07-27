@@ -10,7 +10,13 @@ from detectron2.data import MetadataCatalog
 from detectron2.evaluation import COCOEvaluator, COCOPanopticEvaluator, SemSegEvaluator, DatasetEvaluators
 from detectron2.modeling import GeneralizedRCNNWithTTA
 
-from modet.modeling.panoptic_fpn_sg import build_meta_arch_panoptic_fpn_sg
+#from modet.data.build import build_detection_train_loader, build_detection_test_loader
+
+from modet.data.build_md import (
+    MoDetDatasetMapper,
+    build_detection_test_loader,
+    build_detection_train_loader,
+)
 
 class MoDetTrainer(DefaultTrainer):
     """
@@ -76,15 +82,6 @@ class MoDetTrainer(DefaultTrainer):
         res = OrderedDict({k + "_TTA": v for k, v in res.items()})
         return res
 
-
-    #@classmethod
-    #def build_test_loader(cls, cfg: CfgNode, dataset_name):
-    #    return build_detection_test_loader(cfg, dataset_name, mapper=DatasetMapper(cfg, False))
-
-    #@classmethod
-    #def build_train_loader(cls, cfg: CfgNode):
-    #    return build_detection_train_loader(cfg, mapper=DatasetMapper(cfg, True))
-
     @classmethod
     def build_model(cls, cfg):
         """
@@ -97,5 +94,28 @@ class MoDetTrainer(DefaultTrainer):
         #model = build_meta_arch_panoptic_fpn_sg(cfg)
         model = super().build_model(cfg)
         logger = logging.getLogger(__name__)
-        logger.info("Model:\n{}".format(model))
+        logger.info("[MoDet] Model:\n{}".format(model))
         return model
+
+    
+    @classmethod
+    def build_train_loader(cls, cfg):
+        """
+        Returns:
+            iterable
+
+        It now calls :func:`detectron2.data.build_detection_train_loader`.
+        Overwrite it if you'd like a different data loader.
+        """
+        return build_detection_train_loader(cfg)
+
+    @classmethod
+    def build_test_loader(cls, cfg, dataset_name):
+        """
+        Returns:
+            iterable
+
+        It now calls :func:`detectron2.data.build_detection_test_loader`.
+        Overwrite it if you'd like a different data loader.
+        """
+        return build_detection_test_loader(cfg, dataset_name)

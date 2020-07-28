@@ -1,4 +1,5 @@
 import logging
+import time
 import numpy as np
 import atexit
 from collections import deque
@@ -6,12 +7,30 @@ from collections import deque
 import torch
 from detectron2.engine.defaults import DefaultPredictor
 
+logger = logging.getLogger(__name__)
 
 class MoDetPredictor(DefaultPredictor):
+
+    def format_response(self, original_image, predictions, cpu_device = "cpu"):
+        # Convert image from OpenCV BGR format to Matplotlib RGB format.
+        image = original_image[:, :, ::-1]
+        logger.info("Preds: {}".format(predictions.keys()))
+        if "panoptic_seg" in predictions:
+            panoptic_seg, segments_info = predictions["panoptic_seg"]
+            
+        else:
+            if "sem_seg" in predictions:
+                sem_segs = predictions["sem_seg"].argmax(dim=0).to(cpu_device)
+
+            if "instances" in predictions:
+                instances = predictions["instances"].to(cpu_device)
+        
+        return predictions
+
     """
         Pred Class
     """
-    def pred(self, original_image):
+    def pred_format(self, original_image, cpu_device = "cpu"):
         """
             Prediction handler
             Args:
@@ -23,6 +42,7 @@ class MoDetPredictor(DefaultPredictor):
                     See :doc:`/tutorials/models` for details about the format.
         """
         with torch.no_grad():  # https://github.com/sphinx-doc/sphinx/issues/4258
+            start_time = time.time()
             # Apply pre-processing to image.
             if self.input_format == "RGB":
                 # whether the model expects BGR inputs or RGB
@@ -33,6 +53,15 @@ class MoDetPredictor(DefaultPredictor):
 
             inputs = {"image": image, "height": height, "width": width}
             predictions = self.model([inputs])[0]
-            return predictions
+            logger.info(
+                "{}: {} in {:.2f}s".format(
+                    "Image",
+                    "detected {} instances".format(len(predictions["instances"]))
+                    if "instances" in predictions
+                    else "finished",
+                    time.time() - start_time,
+                )
+            )
+            return self.format_response(original_image, predictions, cpu_device)
         return None
 

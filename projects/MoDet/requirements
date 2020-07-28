@@ -1,19 +1,14 @@
 -f https://download.pytorch.org/whl/torch_stable.html
 torch==1.5.1+cu101
 torchvision==0.6.1+cu101
+torchtext
+torchserve 
+torch-model-archiver
+tensorboard
 
 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cu101/torch1.5/index.html
 detectron2==0.2 
 
-future
-pydot
-graphviz
-tabulate
-cloudpickle
-matplotlib
-mock
-jupyterlab
-tensorboard
 numpy==1.19.0
 requests~=2.21.0
 six~=1.12.0
@@ -26,6 +21,18 @@ pyyaml==5.1
 opencv-contrib-python==4.3.0.36
 opencv-python==4.3.0.36
 Pillow>=7.0
+
+future
+pydot
+graphviz
+tabulate
+cloudpickle
+matplotlib
+mock
+jupyterlab
+flask 
+jsonify
+streamlit 
 
 git+https://github.com/cocodataset/panopticapi.git
 git+https://github.com/lvis-dataset/lvis-api.git

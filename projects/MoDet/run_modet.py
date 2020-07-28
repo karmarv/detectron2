@@ -11,7 +11,7 @@ from detectron2.config import get_cfg
 from detectron2.data.detection_utils import read_image
 from detectron2.utils.logger import setup_logger
 
-from .modet.utils.vis import VisualizationDemo
+from modet.utils.vis import VisualizationDemo
 
 # constants
 WINDOW_NAME = "COCO detections"
@@ -65,7 +65,9 @@ def get_parser():
     )
     return parser
 
-
+""" 
+    python run_modet.py --config-file configs/COCO-PanopticSegmentation/panoptic_fpn_R_50_1x_md.yaml --input ./sample/images/  --opts MODEL.WEIGHTS ./output/model_final.pth
+"""
 if __name__ == "__main__":
     mp.set_start_method("spawn", force=True)
     args = get_parser().parse_args()
@@ -81,34 +83,61 @@ if __name__ == "__main__":
         if len(args.input) == 1:
             args.input = glob.glob(os.path.expanduser(args.input[0]))
             assert args.input, "The input path(s) was not found"
-        for path in tqdm.tqdm(args.input, disable=not args.output):
-            # use PIL, to be consistent with evaluation
-            img = read_image(path, format="BGR")
-            start_time = time.time()
-            predictions, visualized_output = demo.run_on_image(img)
-            logger.info(
-                "{}: {} in {:.2f}s".format(
-                    path,
-                    "detected {} instances".format(len(predictions["instances"]))
-                    if "instances" in predictions
-                    else "finished",
-                    time.time() - start_time,
+        if os.path.isdir(args.input[0]):
+            extension = ".png" # ".jpg"
+            inpdir = args.input[0]
+            outdir = os.path.join(args.input[0], "../out")
+            logger.info("Running detection on all images in this folder: {}".format(inpdir))
+            if not os.path.exists(outdir):
+                os.makedirs(outdir)
+            onlyfiles = [f for f in os.listdir(inpdir) if f.endswith(extension)]
+            print(onlyfiles)
+            for image_file in tqdm.tqdm(onlyfiles):
+                # use PIL, to be consistent with evaluation
+                img = read_image(os.path.join(inpdir, image_file), format="BGR")
+                start_time = time.time()
+                predictions, visualized_output = demo.run_on_image(img)
+                logger.info(
+                    "{}: {} in {:.2f}s".format(
+                        image_file,
+                        "detected {} instances".format(len(predictions["instances"]))
+                        if "instances" in predictions
+                        else "finished",
+                        time.time() - start_time,
+                    )
                 )
-            )
+                if os.path.isdir(outdir):
+                    out_filename = os.path.join(outdir, os.path.basename(image_file))
+                    visualized_output.save(out_filename)
+        else: 
+            for path in tqdm.tqdm(args.input, disable=not args.output):
+                # use PIL, to be consistent with evaluation
+                img = read_image(path, format="BGR")
+                start_time = time.time()
+                predictions, visualized_output = demo.run_on_image(img)
+                logger.info(
+                    "{}: {} in {:.2f}s".format(
+                        path,
+                        "detected {} instances".format(len(predictions["instances"]))
+                        if "instances" in predictions
+                        else "finished",
+                        time.time() - start_time,
+                    )
+                )
 
-            if args.output:
-                if os.path.isdir(args.output):
-                    assert os.path.isdir(args.output), args.output
-                    out_filename = os.path.join(args.output, os.path.basename(path))
+                if args.output:
+                    if os.path.isdir(args.output):
+                        assert os.path.isdir(args.output), args.output
+                        out_filename = os.path.join(args.output, os.path.basename(path))
+                    else:
+                        assert len(args.input) == 1, "Please specify a directory with args.output"
+                        out_filename = args.output
+                    visualized_output.save(out_filename)
                 else:
-                    assert len(args.input) == 1, "Please specify a directory with args.output"
-                    out_filename = args.output
-                visualized_output.save(out_filename)
-            else:
-                cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-                cv2.imshow(WINDOW_NAME, visualized_output.get_image()[:, :, ::-1])
-                if cv2.waitKey(0) == 27:
-                    break  # esc to quit
+                    cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+                    cv2.imshow(WINDOW_NAME, visualized_output.get_image()[:, :, ::-1])
+                    if cv2.waitKey(0) == 27:
+                        break  # esc to quit
 
     elif args.webcam:
         assert args.input is None, "Cannot have both --input and --webcam!"

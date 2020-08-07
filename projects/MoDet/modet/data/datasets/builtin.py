@@ -195,7 +195,7 @@ def register_all_rdd_datasets(root):
     meta = _get_builtin_metadata("rdd")
     for dataset_name, splits_per_dataset in _PREDEFINED_SPLITS_RDD_MD["rdd"].items():
         inst_key = "{}".format(dataset_name)
-        d = dataset_name.split("_")[2]
+        d = dataset_name.split("_")[1]
         print(dataset_name, "\t", splits_per_dataset)
         #load_images_ann_dicts(_root, dataset_name, splits_per_dataset)
         DatasetCatalog.register(

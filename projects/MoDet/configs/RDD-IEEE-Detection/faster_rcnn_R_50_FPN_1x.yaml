@@ -1,0 +1,12 @@
+_BASE_: "../Base-RCNN-FPN.yaml"
+MODEL:
+  WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
+  MASK_ON: False
+  RESNETS:
+    DEPTH: 50
+DATASETS:
+  TRAIN: ("rdd2020_train",)
+  TEST: ("rdd2020_val",)
+SOLVER:
+  STEPS: (210000, 250000)
+  MAX_ITER: 200

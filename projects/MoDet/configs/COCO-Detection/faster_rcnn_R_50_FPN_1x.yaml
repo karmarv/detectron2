@@ -1,0 +1,14 @@
+_BASE_: "../Base-RCNN-FPN.yaml"
+MODEL:
+  WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
+  MASK_ON: False
+  RESNETS:
+    DEPTH: 50
+DATASETS:
+  TRAIN: ("coco_md_2017_train",)
+  PROPOSAL_FILES_TRAIN: ("detectron2://COCO-Detection/rpn_R_50_FPN_1x/137258492/coco_2017_train_box_proposals_21bc3a.pkl", )
+  TEST: ("coco_md_2017_val",)
+  PROPOSAL_FILES_TEST: ("detectron2://COCO-Detection/rpn_R_50_FPN_1x/137258492/coco_2017_val_box_proposals_ee0dad.pkl", )
+SOLVER:
+  STEPS: (210000, 250000)
+  MAX_ITER: 200

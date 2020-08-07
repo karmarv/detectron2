@@ -1,0 +1,13 @@
+_BASE_: "../Base-RCNN-FPN.yaml"
+MODEL:
+  META_ARCHITECTURE: "PanopticFPNMD"
+  MASK_ON: True
+  SEM_SEG_HEAD:
+    LOSS_WEIGHT: 0.5
+DATASETS:
+  #TRAIN: ("coco_md_2017_train_panoptic_separated",)
+  #TEST: ("coco_md_2017_val_panoptic_separated",)
+  TRAIN: ("cityscapes_md_fine_instance_seg_train",)
+  TEST: ("cityscapes_md_fine_instance_seg_val",)
+DATALOADER:
+  FILTER_EMPTY_ANNOTATIONS: False

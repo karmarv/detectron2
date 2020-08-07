@@ -7,7 +7,18 @@ Reference: [Panoptic Segmentation](https://kharshit.github.io/blog/2019/10/18/in
 - Install
     - Pytorch 1.5.1, torchvision 0.6.1, CUDA 10.1, OpenCV 4.3
     ```
-    pip install -r requirements
+        # install dependencies: (use cu101 because colab has CUDA 10.1)
+        pip install -U torch==1.5.1+cu101 torchvision==0.6.1+cu101 -f https://download.pytorch.org/whl/torch_stable.html
+    ```
+    - [Install Detectron2](https://detectron2.readthedocs.io/tutorials/install.html)
+    ```
+        pip install detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cu101/torch1.6/index.html
+        pip install -r requirements
+    ```
+    OR
+    ```
+        git clone https://github.com/facebookresearch/detectron2.git
+        cd detectron2 && python setup.py build develop
     
     ```
 - [Builtin Dataset](https://detectron2.readthedocs.io/tutorials/builtin_datasets.html) Documentation
@@ -35,7 +46,7 @@ Reference: [Panoptic Segmentation](https://kharshit.github.io/blog/2019/10/18/in
     
     python run_modet.py --config-file configs/panoptic_fpn_sg_R_50_1x.yaml --webcam 0                 --opts MODEL.WEIGHTS ./output/model_0014999.pth
     
-    python run_modet.py --config-file configs/panoptic_fpn_sg_R_50_1x.yaml --webcam "http://192.168.0.29:8080/video" --opts MODEL.WEIGHTS detectron2://COCO-PanopticSegmentation/panoptic_fpn_R_50_1x/139514544/model_final_dbfeb4.pkl
+    python run_modet.py --config-file configs/COCO-PanopticSegmentation/panoptic_fpn_R_50_1x_md.yaml --webcam "http://192.168.0.10:8080/video" --opts MODEL.WEIGHTS detectron2://COCO-PanopticSegmentation/panoptic_fpn_R_50_1x/139514544/model_final_dbfeb4.pkl
 
     ```
 

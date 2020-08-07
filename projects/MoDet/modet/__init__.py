@@ -15,3 +15,5 @@ from .modeling.panoptic_fpn_md import PanopticFPNMD
 from .engine.trainer import MoDetTrainer
 from .engine.predictor import MoDetPredictor
 from .utils.vis import VisualizationDemo
+from .utils.visualizer import MoDetVisualizer
+from .utils.video_visualizer import MoDetVideoVisualizer

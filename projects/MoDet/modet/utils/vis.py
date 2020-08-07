@@ -8,29 +8,12 @@ import cv2
 import torch
 
 from detectron2.data import MetadataCatalog
-from modet.engine.predictor import MoDetPredictor
-
 from detectron2.utils.video_visualizer import VideoVisualizer
-from detectron2.utils.visualizer import ColorMode, Visualizer
+from detectron2.utils.visualizer import Visualizer, ColorMode
 
-
-class MoDetVisualizer(Visualizer):
-    """
-        Visualizer Class
-    """
-    def visualize(self) -> None:
-        """
-           Visualize
-        """
-        return None
-
-class MoDetVideoVisualizer(VideoVisualizer):
-    def visualize(self) -> None:
-        """
-           Visualize
-        """        
-        return None
-
+from modet.engine.predictor import MoDetPredictor
+from modet.utils.visualizer import MoDetVisualizer
+from modet.utils.video_visualizer import MoDetVideoVisualizer
 
 class VisualizationDemo(object):
     def __init__(self, cfg):
@@ -44,7 +27,7 @@ class VisualizationDemo(object):
         self.metadata = MetadataCatalog.get(
             cfg.DATASETS.TEST[0] if len(cfg.DATASETS.TEST) else "__unused"
         )
-        self.cpu_device = torch.device("cpu")
+        self.cpu_device = torch.device("cuda")
         self.predictor = MoDetPredictor(cfg)
 
     def run_on_image(self, image):
@@ -65,7 +48,7 @@ class VisualizationDemo(object):
         if "panoptic_seg" in predictions:
             panoptic_seg, segments_info = predictions["panoptic_seg"]
             vis_output = visualizer.draw_panoptic_seg_predictions(
-                panoptic_seg.to(self.cpu_device), segments_info
+                panoptic_seg.to(self.cpu_device), segments_info.to(self.cpu_device)
             )
         else:
             if "sem_seg" in predictions:

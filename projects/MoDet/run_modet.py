@@ -14,7 +14,7 @@ from detectron2.utils.logger import setup_logger
 from modet.utils.vis import VisualizationDemo
 
 # constants
-WINDOW_NAME = "COCO detections"
+WINDOW_NAME = "Panoptic Detections"
 
 
 def setup_cfg(args):
@@ -76,7 +76,6 @@ if __name__ == "__main__":
     logger.info("Arguments: " + str(args))
 
     cfg = setup_cfg(args)
-
     demo = VisualizationDemo(cfg)
 
     if args.input:
@@ -149,13 +148,21 @@ if __name__ == "__main__":
         else:
             print("Video Stream path: ", args.webcam)
             stream_identifier = args.webcam #rtsp "http://192.168.0.29:8080/video"
-        exit()
         
         logger.info("Video frames from webcam")
         cam = cv2.VideoCapture(stream_identifier)
+        # Check success
+        if not cam.isOpened():
+            raise Exception("Could not open video device")
+        else:
+            width = 640 #1920
+            height = 480 #1080
+            cam.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+            cam.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
         for vis in tqdm.tqdm(demo.run_on_video(cam)):
-            cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-            cv2.imshow(WINDOW_NAME, vis)
+            window_name = f"{WINDOW_NAME}_{width}x{height}"
+            cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+            cv2.imshow(window_name, vis)
             if cv2.waitKey(1) == 27:
                 break  # esc to quit
         cam.release()

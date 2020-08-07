@@ -87,6 +87,7 @@ COCO_CATEGORIES = [
 	 {"supercategory": "indoor", "color": [201, 57, 1], "isthing": 1, "id": 88, "name": "teddy bear"},
 	 {"supercategory": "indoor", "color": [246, 0, 122], "isthing": 1, "id": 89, "name": "hair drier"},
 	 {"supercategory": "indoor", "color": [191, 162, 208], "isthing": 1, "id": 90, "name": "toothbrush"},
+     
 	 {"supercategory": "textile", "color": [255, 255, 128], "isthing": 0, "id": 92, "name": "banner"},
 	 {"supercategory": "textile", "color": [147, 211, 203], "isthing": 0, "id": 93, "name": "blanket"},
 	 {"supercategory": "building", "color": [150, 100, 100], "isthing": 0, "id": 95, "name": "bridge"},

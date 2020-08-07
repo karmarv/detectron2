@@ -1,3 +1,61 @@
+### Panoptic Segmentation [reference](https://github.com/Angzz/awesome-panoptic-segmentation)
+
+##### Definition
+A unified general view of semantic image segmentation. PS algorithm heuristically combines the semantic segmentation of *Stuff* with instance segmentation of *Thing* in the scene
+- Semantic segmentation: pixelwise segmentation of stuff classes using a fully conv net with dilations
+- Instance segmentation: A region proposal based object detection task
+
+<div align="center"><img src="sample/readme/panoptic_segmentation_overview2.png" width="900" height="180"></div>
+
+###### Structure Overview
+<div align="center"><img src="sample/readme/panoptic_structure.png" width="800" height="240"></div>
+
+from [UPSNet](https://arxiv.org/pdf/1901.03784.pdf).
+
+###### Task
+
+Each pixel is assigned a semantic label and an instance id. 
+- Pixel with same label and id belong to the same object for stuff labels, the instance id is ignored
+- Unlike instance segmentation, object segmentation must be non-overlapping
+- it is not a multi-task problem but rather a "unified view" or "strict generalization" of semantic image segmentation 
+
+
+###### Dataset
+datasets which contains both semantic and instance annotations
+
+* [COCO-Panoptic](http://cocodataset.org/)
+* [Cityscapes](https://www.cityscapes-dataset.com/)
+* [Mapillary Vistas](https://blog.mapillary.com/product/2017/05/03/mapillary-vistas-dataset.html)
+* [ADE20K](http://groups.csail.mit.edu/vision/datasets/ADE20K/)
+* [IDD20K](http://idd.insaan.iiit.ac.in/)
+
+
+###### Metrics [Panoptic Quality](https://cocodataset.org/#panoptic-eval)
+* ``PQ`` are the standard metrics described in [Panoptic Segmentation](https://arxiv.org/pdf/1801.00868.pdf). 
+`` PQ = Seg Quality (SQ) x Recognitions Quality (RQ) ``
+<div align="center" width="10" height="5"><img src="sample/readme/pq_metric.png" width="600" height="150"></div>
+
+* ``PC`` are the standard metrics described in [DeeperLab](https://arxiv.org/pdf/1902.05093).
+<div align="center" width="10" height="5"><img src="sample/readme/pc_metric.png" width="600" height="207"></div>
+
+###### Competition Leaderboard 
+* [COCO 2018 Panoptic Segmentation Task (ECCV 2018 Workshop, Closed)](http://cocodataset.org/index.htm#panoptic-2018)
+
+###### Preprint 2020
+
+* **EfficientPS:** Rohit Mohan and	Abhinav Valada, "EfficientPS: Efficient Panoptic Segmentation", 
+arXiv preprint arXiv:2004.02307, 2020. [[Paper/Code](http://panoptic.cs.uni-freiburg.de/)]
+
+###### CVPR2020
+* **Video Panoptic Segmentation:** Dahun Kim, Sanghyun Woo, Joon-Young Lee, In So Kweon <br />"VPSNet for Video Panoptic Segmentation." CVPR (2020). [[Paper/Code](https://github.com/mcahny/vps)]
+
+###### AAAI2020
+* **SOGNet:** Yibo Yang, Hongyang Li, Xia Li, Qijie Zhao, Jianlong Wu, Zhouchen Lin.<br />"SOGNet: Scene Overlap Graph Network for Panoptic Segmentation." AAAI (2020). [[paper](https://arxiv.org/pdf/1911.07527.pdf)]
+
+###### CVPR2019
+* **Panoptic Segmentation:** Alexander Kirillov, Kaiming He, Ross Girshick, Carsten Rother, Piotr Dollár.<br />"Panoptic Segmentation." CVPR (2019). [[paper](https://arxiv.org/pdf/1801.00868.pdf)]
+
+---
 
 #### A. Working with [PyTorch](https://pytorch.org/get-started/locally/) and [CUDA 10.1](https://www.tensorflow.org/install/gpu#install_cuda_with_apt)
 

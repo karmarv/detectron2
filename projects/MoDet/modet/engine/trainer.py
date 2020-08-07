@@ -7,16 +7,26 @@ from collections import OrderedDict
 from detectron2.config import CfgNode
 from detectron2.engine import DefaultTrainer
 from detectron2.data import MetadataCatalog
-from detectron2.evaluation import COCOEvaluator, COCOPanopticEvaluator, SemSegEvaluator, DatasetEvaluators
+from detectron2.utils import comm
+from detectron2.evaluation import COCOEvaluator, SemSegEvaluator, DatasetEvaluators
+from detectron2.evaluation import (
+    DatasetEvaluator,
+    inference_on_dataset,
+    print_csv_format,
+    verify_results,
+)
 from detectron2.modeling import GeneralizedRCNNWithTTA
 
 #from modet.data.build import build_detection_train_loader, build_detection_test_loader
 
+from modet.evaluator.panoptic_evaluation import COCOPanopticEvaluator
 from modet.data.build_md import (
     MoDetDatasetMapper,
     build_detection_test_loader,
     build_detection_train_loader,
 )
+
+logger = logging.getLogger(__name__)
 
 class MoDetTrainer(DefaultTrainer):
     """
@@ -37,7 +47,7 @@ class MoDetTrainer(DefaultTrainer):
             output_folder = os.path.join(cfg.OUTPUT_DIR, "inference")
         evaluator_list = []
         evaluator_type = MetadataCatalog.get(dataset_name).evaluator_type
-
+        logger.info("[MoDet.build_evaluator] Dataset: {}, Evaluator type: {}".format(dataset_name, evaluator_type))
         if evaluator_type in ["sem_seg", "coco_panoptic_seg"]:
             evaluator_list.append(
                 SemSegEvaluator(
@@ -53,6 +63,7 @@ class MoDetTrainer(DefaultTrainer):
         if evaluator_type == "coco_panoptic_seg":
             evaluator_list.append(COCOPanopticEvaluator(dataset_name, output_folder))
         
+        logger.info("[MoDet.build_evaluator] Dataset: {}, Evaluator List: {} ".format(dataset_name, evaluator_type, evaluator_list))
         if len(evaluator_list) == 0:
             raise NotImplementedError(
                 "no Evaluator for the dataset {} with the type {}".format(
@@ -63,7 +74,62 @@ class MoDetTrainer(DefaultTrainer):
             return evaluator_list[0]
         #if cfg.MODEL.DENSEPOSE_ON:
         #    evaluators.append(DensePoseCOCOEvaluator(dataset_name, True, output_folder))
+
         return DatasetEvaluators(evaluator_list)
+
+    @classmethod
+    def test(cls, cfg, model, evaluators=None):
+        """
+        Args:
+            cfg (CfgNode):
+            model (nn.Module):
+            evaluators (list[DatasetEvaluator] or None): if None, will call
+                :meth:`build_evaluator`. Otherwise, must have the same length as
+                `cfg.DATASETS.TEST`.
+
+        Returns:
+            dict: a dict of result metrics
+        """
+
+        if isinstance(evaluators, DatasetEvaluator):
+            evaluators = [evaluators]
+        if evaluators is not None:
+            assert len(cfg.DATASETS.TEST) == len(evaluators), "{} != {}".format(
+                len(cfg.DATASETS.TEST), len(evaluators)
+            )
+
+        results = OrderedDict()
+        for idx, dataset_name in enumerate(cfg.DATASETS.TEST):
+            data_loader = cls.build_test_loader(cfg, dataset_name)
+            # When evaluators are passed in as arguments,
+            # implicitly assume that evaluators can be created before data_loader.
+            logger.info("[MoDet.test] Id: {}, Dataset: {}, Evaluators : {} ".format(idx, dataset_name, evaluators))
+            if evaluators is not None:
+                evaluator = evaluators[idx]
+            else:
+                try:
+                    evaluator = cls.build_evaluator(cfg, dataset_name)
+                except NotImplementedError:
+                    logger.warn(
+                        "No evaluator found. Use `DefaultTrainer.test(evaluators=)`, "
+                        "or implement its `build_evaluator` method."
+                    )
+                    results[dataset_name] = {}
+                    continue
+            results_i = inference_on_dataset(model, data_loader, evaluator)
+            results[dataset_name] = results_i
+            if comm.is_main_process():
+                assert isinstance(
+                    results_i, dict
+                ), "Evaluator must return a dict on the main process. Got {} instead.".format(
+                    results_i
+                )
+                logger.info("Evaluation results for {} in csv format:".format(dataset_name))
+                print_csv_format(results_i)
+
+        if len(results) == 1:
+            results = list(results.values())[0]
+        return results
 
     @classmethod
     def test_with_TTA(cls, cfg, model):
@@ -91,10 +157,8 @@ class MoDetTrainer(DefaultTrainer):
         It now calls :func:`detectron2.modeling.build_model`.
         Overwrite it if you'd like a different model.
         """
-        #model = build_meta_arch_panoptic_fpn_sg(cfg)
         model = super().build_model(cfg)
-        logger = logging.getLogger(__name__)
-        logger.info("[MoDet] Model:\n{}".format(model))
+        #logger.info("[MoDet] Model:\n{}".format(model))
         return model
 
     
@@ -119,3 +183,8 @@ class MoDetTrainer(DefaultTrainer):
         Overwrite it if you'd like a different data loader.
         """
         return build_detection_test_loader(cfg, dataset_name)
+
+
+
+
+

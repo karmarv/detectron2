@@ -19,14 +19,22 @@ Reference: [Panoptic Segmentation](https://kharshit.github.io/blog/2019/10/18/in
     - DETECTRON2_DATASETS variable should have [COCO panoptic dataset folder path with stuff](https://detectron2.readthedocs.io/tutorials/builtin_datasets.html#expected-dataset-structure-for-panopticfpn) 
     ```
     export DETECTRON2_DATASETS="/media/rahul/Karmic/data"
-    python train_net.py --config-file configs/COCO-PanopticSegmentation/panoptic_fpn_sg_R_50_1x.yaml  \
-    --num-gpus 1 SOLVER.IMS_PER_BATCH 2 SOLVER.BASE_LR 0.0025
+
+    python train_net.py --config-file configs/GRC-IEEE-Detection/faster_rcnn_R_50_FPN_1x.yaml --num-gpus 1 SOLVER.IMS_PER_BATCH 2 SOLVER.BASE_LR 0.0025
+
+    python train_net.py --config-file ../configs/COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_1x.yaml --num-gpus 1 SOLVER.IMS_PER_BATCH 2 SOLVER.BASE_LR 0.0025
+    
+    python train_net.py --config-file configs/COCO-PanopticSegmentation/panoptic_fpn__R_50_1x_md.yaml --num-gpus 1 SOLVER.IMS_PER_BATCH 2 SOLVER.BASE_LR 0.0025
+    
+    python train_net.py --config-file configs/Cityscapes/panoptic_fpn_R_50_1x_md.yaml --num-gpus 1 SOLVER.IMS_PER_BATCH 2 SOLVER.BASE_LR 0.0025
     ```
 - Demo
     - Image, Webcam, IPCam Stream
     ```
     python run_modet.py --config-file configs/panoptic_fpn_sg_R_50_1x.yaml --input sample/input1.jpg  --opts MODEL.WEIGHTS ./output/model_0014999.pth
+    
     python run_modet.py --config-file configs/panoptic_fpn_sg_R_50_1x.yaml --webcam 0                 --opts MODEL.WEIGHTS ./output/model_0014999.pth
+    
     python run_modet.py --config-file configs/panoptic_fpn_sg_R_50_1x.yaml --webcam "http://192.168.0.29:8080/video" --opts MODEL.WEIGHTS detectron2://COCO-PanopticSegmentation/panoptic_fpn_R_50_1x/139514544/model_final_dbfeb4.pkl
 
     ```

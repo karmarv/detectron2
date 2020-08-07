@@ -8,6 +8,9 @@ from .data.build_md import (
 )
 from .data.dataset_mapper import MoDetDatasetMapper
 
+from .evaluator.panoptic_evaluation import COCOPanopticEvaluator
+from .evaluator.panoptic_evaluation import CityscapesPanopticEvaluator
+
 from .modeling.panoptic_fpn_md import PanopticFPNMD
 from .engine.trainer import MoDetTrainer
 from .engine.predictor import MoDetPredictor

@@ -23,7 +23,9 @@ import logging
 from detectron2.data import DatasetCatalog, MetadataCatalog
 
 from modet.data.datasets.builtin_meta import _get_builtin_metadata
+from modet.data.datasets.cityscapes import load_cityscapes_instances, load_cityscapes_semantic
 from modet.data.datasets.register_coco import register_coco_instances, register_coco_panoptic_separated
+from modet.data.datasets.rdd import load_images_ann_dicts
 
 # ==== Predefined datasets and splits for COCO ==========
 
@@ -106,6 +108,106 @@ def register_all_coco_md(root):
             instances_json,
         )
 
+
+# ==== Predefined splits for raw cityscapes images ===========
+
+
+_RAW_CITYSCAPES_MD_SPLITS = {
+    "cityscapes_md_fine_{task}_train": ("cityscapes/leftImg8bit/train", "cityscapes/gtFine/train"),
+    "cityscapes_md_fine_{task}_val": ("cityscapes/leftImg8bit/val", "cityscapes/gtFine/val"),
+    "cityscapes_md_fine_{task}_test": ("cityscapes/leftImg8bit/test", "cityscapes/gtFine/test"),
+}
+
+_RAW_CITYSCAPES_MD_PANOPTIC_SPLITS = {
+    "cityscapes_md_panoptic_fine_{task}_train": ("cityscapes/leftImg8bit/train", "cityscapes/gtFine/train"),
+    "cityscapes_md_panoptic_fine_{task}_val": ("cityscapes/leftImg8bit/val", "cityscapes/gtFine/val"),
+    "cityscapes_md_panoptic_fine_{task}_test": ("cityscapes/leftImg8bit/test", "cityscapes/gtFine/test"),
+}
+
+def register_all_cityscapes(root):
+    # Regular cityscapes dataset
+    for key, (image_dir, gt_dir) in _RAW_CITYSCAPES_MD_SPLITS.items():
+        meta = _get_builtin_metadata("cityscapes_md")
+        image_dir = os.path.join(root, image_dir)
+        gt_dir = os.path.join(root, gt_dir)
+
+        inst_key = key.format(task="instance_seg")
+        DatasetCatalog.register(
+            inst_key,
+            lambda x=image_dir, y=gt_dir: load_cityscapes_instances(
+                x, y, from_json=True, to_polygons=True
+            ),
+        )
+        MetadataCatalog.get(inst_key).set(
+            image_dir=image_dir, gt_dir=gt_dir, evaluator_type="cityscapes_instance", **meta
+        )
+
+        sem_key = key.format(task="sem_seg")
+        DatasetCatalog.register(
+            sem_key, lambda x=image_dir, y=gt_dir: load_cityscapes_semantic(x, y)
+        )
+        MetadataCatalog.get(sem_key).set(
+            image_dir=image_dir, gt_dir=gt_dir, evaluator_type="cityscapes_sem_seg", **meta
+        )
+    
+    # Panoptic cityscapes dataset [TODO: evaluator and config verification ]
+    for key, (image_dir, gt_dir) in _RAW_CITYSCAPES_MD_PANOPTIC_SPLITS.items():
+        meta = _get_builtin_metadata("cityscapes_md_panoptic")
+        image_dir = os.path.join(root, image_dir)
+        gt_dir = os.path.join(root, gt_dir)
+
+        inst_key = key.format(task="instance_seg")
+        DatasetCatalog.register(
+            inst_key,
+            lambda x=image_dir, y=gt_dir: load_cityscapes_instances(
+                x, y, from_json=True, to_polygons=True
+            ),
+        )
+        MetadataCatalog.get(inst_key).set(
+            image_dir=image_dir, gt_dir=gt_dir, evaluator_type="cityscapes_instance", **meta
+        )
+
+        sem_key = key.format(task="sem_seg")
+        DatasetCatalog.register(
+            sem_key, lambda x=image_dir, y=gt_dir: load_cityscapes_semantic(x, y)
+        )
+        MetadataCatalog.get(sem_key).set(
+            image_dir=image_dir, gt_dir=gt_dir, evaluator_type="cityscapes_sem_seg", **meta
+        )
+
+
+
+# ==== Predefined splits for raw grc images ===========
+
+_PREDEFINED_SPLITS_RDD_MD = {}
+_PREDEFINED_SPLITS_RDD_MD["rdd"] = {
+    "rdd2020_val"  : ( "RoadDamageDataset/val/Czech", 
+                       "RoadDamageDataset/val/India", 
+                       "RoadDamageDataset/val/Japan"),
+    "rdd2020_train": ( "RoadDamageDataset/train/Czech", 
+                       "RoadDamageDataset/train/India", 
+                       "RoadDamageDataset/train/Japan")
+}
+
+def register_all_rdd_datasets(root):
+    logger = logging.getLogger(__name__)
+    logger.info("[MoDet] Register GRC in COCO format from {}".format(root))
+    meta = _get_builtin_metadata("rdd")
+    for dataset_name, splits_per_dataset in _PREDEFINED_SPLITS_RDD_MD["rdd"].items():
+        inst_key = "{}".format(dataset_name)
+        d = dataset_name.split("_")[2]
+        print(dataset_name, "\t", splits_per_dataset)
+        #load_images_ann_dicts(_root, dataset_name, splits_per_dataset)
+        DatasetCatalog.register(
+            inst_key,
+            lambda d=d: load_images_ann_dicts(root, splits_per_dataset),
+        )
+        MetadataCatalog.get(inst_key).set(evaluator_type="coco", **meta) 
+    return None
+
+
 # Register them all under "./datasets"
 _root = os.getenv("DETECTRON2_DATASETS", "datasets")
 register_all_coco_md(_root)
+register_all_cityscapes(_root)
+register_all_rdd_datasets(_root)

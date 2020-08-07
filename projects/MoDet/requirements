@@ -28,6 +28,7 @@ graphviz
 tabulate
 cloudpickle
 matplotlib
+shapely
 mock
 jupyterlab
 flask 

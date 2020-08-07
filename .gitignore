@@ -46,3 +46,4 @@ wheels/
 /projects/*/datasets
 /models
 /projects/*/output
+**/=2.0.1

@@ -1,26 +1,26 @@
-### Panoptic Segmentation [reference](https://github.com/Angzz/awesome-panoptic-segmentation)
+### Panoptic Segmentation 
 
-##### Definition
+#### [Reference](https://github.com/Angzz/awesome-panoptic-segmentation)
+
+##### 1. Definition
 A unified general view of semantic image segmentation. PS algorithm heuristically combines the semantic segmentation of *Stuff* with instance segmentation of *Thing* in the scene
 - Semantic segmentation: pixelwise segmentation of stuff classes using a fully conv net with dilations
 - Instance segmentation: A region proposal based object detection task
 
 <div align="center"><img src="sample/readme/panoptic_segmentation_overview2.png" width="900" height="180"></div>
 
-###### Structure Overview
+##### 2. Structure Overview
 <div align="center"><img src="sample/readme/panoptic_structure.png" width="800" height="240"></div>
 
 from [UPSNet](https://arxiv.org/pdf/1901.03784.pdf).
 
-###### Task
-
+##### 3. Task
 Each pixel is assigned a semantic label and an instance id. 
 - Pixel with same label and id belong to the same object for stuff labels, the instance id is ignored
 - Unlike instance segmentation, object segmentation must be non-overlapping
 - it is not a multi-task problem but rather a "unified view" or "strict generalization" of semantic image segmentation 
 
-
-###### Dataset
+##### 4. Dataset
 datasets which contains both semantic and instance annotations
 
 * [COCO-Panoptic](http://cocodataset.org/)
@@ -30,7 +30,7 @@ datasets which contains both semantic and instance annotations
 * [IDD20K](http://idd.insaan.iiit.ac.in/)
 
 
-###### Metrics [Panoptic Quality](https://cocodataset.org/#panoptic-eval)
+##### 5. Metrics: [Panoptic Quality](https://cocodataset.org/#panoptic-eval)
 * ``PQ`` are the standard metrics described in [Panoptic Segmentation](https://arxiv.org/pdf/1801.00868.pdf). 
 `` PQ = Seg Quality (SQ) x Recognitions Quality (RQ) ``
 <div align="center" width="10" height="5"><img src="sample/readme/pq_metric.png" width="600" height="150"></div>
@@ -38,44 +38,48 @@ datasets which contains both semantic and instance annotations
 * ``PC`` are the standard metrics described in [DeeperLab](https://arxiv.org/pdf/1902.05093).
 <div align="center" width="10" height="5"><img src="sample/readme/pc_metric.png" width="600" height="207"></div>
 
-###### Competition Leaderboard 
+##### 6. Competition Leaderboard 
 * [COCO 2018 Panoptic Segmentation Task (ECCV 2018 Workshop, Closed)](http://cocodataset.org/index.htm#panoptic-2018)
 
-###### Preprint 2020
 
-* **EfficientPS:** Rohit Mohan and	Abhinav Valada, "EfficientPS: Efficient Panoptic Segmentation", 
+##### 7. Papers 
+
+* (Arxiv 2020) **EfficientPS:** Rohit Mohan and	Abhinav Valada, "EfficientPS: Efficient Panoptic Segmentation", 
 arXiv preprint arXiv:2004.02307, 2020. [[Paper/Code](http://panoptic.cs.uni-freiburg.de/)]
 
-###### CVPR2020
-* **Video Panoptic Segmentation:** Dahun Kim, Sanghyun Woo, Joon-Young Lee, In So Kweon <br />"VPSNet for Video Panoptic Segmentation." CVPR (2020). [[Paper/Code](https://github.com/mcahny/vps)]
+* (CVPR 2020) **Video Panoptic Segmentation:** Dahun Kim, Sanghyun Woo, Joon-Young Lee, In So Kweon <br />"VPSNet for Video Panoptic Segmentation." CVPR (2020). [[Paper/Code](https://github.com/mcahny/vps)]
 
-###### AAAI2020
-* **SOGNet:** Yibo Yang, Hongyang Li, Xia Li, Qijie Zhao, Jianlong Wu, Zhouchen Lin.<br />"SOGNet: Scene Overlap Graph Network for Panoptic Segmentation." AAAI (2020). [[paper](https://arxiv.org/pdf/1911.07527.pdf)]
+* (AAAI 2020) **SOGNet:** Yibo Yang, Hongyang Li, Xia Li, Qijie Zhao, Jianlong Wu, Zhouchen Lin.<br />"SOGNet: Scene Overlap Graph Network for Panoptic Segmentation." AAAI (2020). [[paper](https://arxiv.org/pdf/1911.07527.pdf)]
 
-###### CVPR2019
-* **Panoptic Segmentation:** Alexander Kirillov, Kaiming He, Ross Girshick, Carsten Rother, Piotr Dollár.<br />"Panoptic Segmentation." CVPR (2019). [[paper](https://arxiv.org/pdf/1801.00868.pdf)]
+* (CVPR 2019) **Panoptic Segmentation:** Alexander Kirillov, Kaiming He, Ross Girshick, Carsten Rother, Piotr Dollár.<br />"Panoptic Segmentation." CVPR (2019). [[paper](https://arxiv.org/pdf/1801.00868.pdf)]
 
 ---
 
 #### A. Working with [PyTorch](https://pytorch.org/get-started/locally/) and [CUDA 10.1](https://www.tensorflow.org/install/gpu#install_cuda_with_apt)
-
+- Pytorch 1.5.1, torchvision 0.6.1, CUDA 10.1, OpenCV 4.3
 ```
-
+    # install dependencies: (use cu101 because colab has CUDA 10.1)
+    pip install -U torch==1.5.1+cu101 torchvision==0.6.1+cu101 -f https://download.pytorch.org/whl/torch_stable.html
 ```
 
 #### B. Python [Virtual Environment Wrapper](https://medium.com/the-andela-way/configuring-python-environment-with-virtualenvwrapper-8745c2895745)
-
-``` 
- mkvirtualenv det2 -p python3 
- pip install -r requirements
-```
+- Setup virtualenvwrapper
+    ``` 
+    mkvirtualenv det2 -p python3 
+    pip install -r requirements
+    ```
+- [Install Detectron2](https://detectron2.readthedocs.io/tutorials/install.html)
+    ```
+    pip install detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cu101/torch1.6/index.html
+    pip install -r requirements
+    ```
+    OR
+    ```
+    git clone https://github.com/facebookresearch/detectron2.git
+    cd detectron2 && python setup.py build develop
+    ```
 
 #### C. Working with the Upstream GIT code [reference](https://stackoverflow.com/questions/7244321/how-do-i-update-a-github-forked-repository)
-
-```
-git clone https://github.com/vishwakarmarhl/detectron2
-cd detectron2
-```
 
 1. Add the "upstream" to your cloned repository ("origin"):
  ```git remote add upstream git@github.com:facebookresearch/detectron2.git```

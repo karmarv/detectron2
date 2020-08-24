@@ -7,10 +7,10 @@ A unified general view of semantic image segmentation. PS algorithm heuristicall
 - Semantic segmentation: pixelwise segmentation of stuff classes using a fully conv net with dilations
 - Instance segmentation: A region proposal based object detection task
 
-<div align="center"><img src="sample/readme/panoptic_segmentation_overview2.png" width="900" height="180"></div>
+<div align="center"><img src="./sample/readme/panoptic_segmentation_overview2.png" width="900" height="180"></div>
 
 ##### 2. Structure Overview
-<div align="center"><img src="sample/readme/panoptic_structure.png" width="800" height="240"></div>
+<div align="center"><img src="./sample/readme/panoptic_structure.png" width="800" height="240"></div>
 
 from [UPSNet](https://arxiv.org/pdf/1901.03784.pdf).
 
@@ -33,10 +33,10 @@ datasets which contains both semantic and instance annotations
 ##### 5. Metrics: [Panoptic Quality](https://cocodataset.org/#panoptic-eval)
 * ``PQ`` are the standard metrics described in [Panoptic Segmentation](https://arxiv.org/pdf/1801.00868.pdf). 
 `` PQ = Seg Quality (SQ) x Recognitions Quality (RQ) ``
-<div align="center" width="10" height="5"><img src="sample/readme/pq_metric.png" width="600" height="150"></div>
+<div align="center" width="10" height="5"><img src="./sample/readme/pq_metric.png" width="600" height="150"></div>
 
 * ``PC`` are the standard metrics described in [DeeperLab](https://arxiv.org/pdf/1902.05093).
-<div align="center" width="10" height="5"><img src="sample/readme/pc_metric.png" width="600" height="207"></div>
+<div align="center" width="10" height="5"><img src="./sample/readme/pc_metric.png" width="600" height="207"></div>
 
 ##### 6. Competition Leaderboard 
 * [COCO 2018 Panoptic Segmentation Task (ECCV 2018 Workshop, Closed)](http://cocodataset.org/index.htm#panoptic-2018)
@@ -56,10 +56,10 @@ arXiv preprint arXiv:2004.02307, 2020. [[Paper/Code](http://panoptic.cs.uni-frei
 ---
 
 #### A. Working with [PyTorch](https://pytorch.org/get-started/locally/) and [CUDA 10.1](https://www.tensorflow.org/install/gpu#install_cuda_with_apt)
-- Pytorch 1.5.1, torchvision 0.6.1, CUDA 10.1, OpenCV 4.3
+- Pytorch 1.6.0, torchvision 0.7.0, CUDA 10.1, OpenCV 4.3
 ```
-    # install dependencies: (use cu101 because colab has CUDA 10.1)
-    pip install -U torch==1.5.1+cu101 torchvision==0.6.1+cu101 -f https://download.pytorch.org/whl/torch_stable.html
+   # install dependencies: (use cu101 because colab has CUDA 10.1)
+   pip install torch==1.6.0+cu101 torchvision==0.7.0+cu101 -f https://download.pytorch.org/whl/torch_stable.html
 ```
 
 #### B. Python [Virtual Environment Wrapper](https://medium.com/the-andela-way/configuring-python-environment-with-virtualenvwrapper-8745c2895745)

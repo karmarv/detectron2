@@ -4,8 +4,7 @@
 import inspect
 import numpy as np
 import pprint
-from abc import ABCMeta, abstractmethod
-from typing import List, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple, Union
 from fvcore.transforms.transform import Transform, TransformList
 
 """
@@ -57,6 +56,7 @@ To extend the system, one can do:
 
 __all__ = [
     "Augmentation",
+    "AugmentationList",
     "TransformGen",
     "apply_transform_gens",
     "AugInput",
@@ -77,7 +77,22 @@ def _check_img_dtype(img):
     assert img.ndim in [2, 3], img.ndim
 
 
-class Augmentation(metaclass=ABCMeta):
+def _get_aug_input_args(aug, aug_input) -> List[Any]:
+    """
+    Get the arguments to be passed to ``aug.get_transform`` from the input ``aug_input``.
+    """
+    args = []
+    for f in aug.input_args:
+        try:
+            args.append(getattr(aug_input, f))
+        except AttributeError:
+            raise AttributeError(
+                f"Augmentation {aug} needs '{f}', which is not an attribute of {aug_input}!"
+            )
+    return args
+
+
+class Augmentation:
     """
     Augmentation defines policies/strategies to generate :class:`Transform` from data.
     It is often used for pre-processing of input data. A policy typically contains
@@ -129,20 +144,42 @@ class Augmentation(metaclass=ABCMeta):
                 if k != "self" and not k.startswith("_"):
                     setattr(self, k, v)
 
-    # NOTE: in the future, can allow it to return list[Augmentation],
-    # to delegate augmentation to others
-    @abstractmethod
     def get_transform(self, *args) -> Transform:
         """
-        Execute the policy to use input data to create transform(s).
+        Execute the policy based on input data, and decide what transform to apply to inputs.
 
         Args:
             arguments must follow what's defined in :attr:`input_args`.
 
         Returns:
-            Return a :class:`Transform` instance, which is the transform to apply to inputs.
+            Transform: Returns the deterministic transform to apply to the input.
         """
-        pass
+        raise NotImplementedError
+
+    def __call__(self, aug_input) -> Transform:
+        """
+        Augment the given `aug_input` **in-place**, and return the transform that's used.
+
+        This method will be called to apply the augmentation. In most augmentation, it
+        is enough to use the default implementation, which calls :meth:`get_transform` on
+        the inputs. But a subclass can overwrite it to have more complicated logic.
+
+        Args:
+            aug_input (AugInput): an object that has attributes needed by this augmentation
+                (defined by ``self.input_args``). Its ``transform`` method will be called
+                to in-place transform it.
+
+        Returns:
+            Transform: the transform that is applied on the input.
+        """
+        args = _get_aug_input_args(self, aug_input)
+        tfm = self.get_transform(*args)
+        assert isinstance(tfm, (Transform, TransformList)), (
+            f"{type(self)}.get_transform must return an instance of Transform! "
+            "Got {type(tfm)} instead."
+        )
+        aug_input.transform(tfm)
+        return tfm
 
     def _rand_range(self, low=1.0, high=None, size=None):
         """
@@ -175,7 +212,11 @@ class Augmentation(metaclass=ABCMeta):
                 default = param.default
                 if default is attr:
                     continue
-                argstr.append("{}={}".format(name, pprint.pformat(attr)))
+                attr_str = pprint.pformat(attr)
+                if "\n" in attr_str:
+                    # don't show it if pformat decides to use >1 lines
+                    attr_str = "..."
+                argstr.append("{}={}".format(name, attr_str))
             return "{}({})".format(classname, ", ".join(argstr))
         except AssertionError:
             return super().__repr__()
@@ -183,10 +224,56 @@ class Augmentation(metaclass=ABCMeta):
     __str__ = __repr__
 
 
-TransformGen = Augmentation
-"""
-Alias for Augmentation, since it is something that generates :class:`Transform`s
-"""
+def _transform_to_aug(tfm_or_aug):
+    """
+    Wrap Transform into Augmentation.
+    Private, used internally to implement augmentations.
+    """
+    assert isinstance(tfm_or_aug, (Transform, Augmentation)), tfm_or_aug
+    if isinstance(tfm_or_aug, Augmentation):
+        return tfm_or_aug
+    else:
+
+        class _TransformToAug(Augmentation):
+            def __init__(self, tfm: Transform):
+                self.tfm = tfm
+
+            def get_transform(self, *args):
+                return self.tfm
+
+            def __repr__(self):
+                return repr(self.tfm)
+
+            __str__ = __repr__
+
+        return _TransformToAug(tfm_or_aug)
+
+
+class AugmentationList(Augmentation):
+    """
+    Apply a sequence of augmentations.
+    """
+
+    def __init__(self, augs):
+        """
+        Args:
+            augs (list[Augmentation or Transform]):
+        """
+        super().__init__()
+        self.augs = [_transform_to_aug(x) for x in augs]
+
+    def __call__(self, aug_input) -> Transform:
+        tfms = []
+        for x in self.augs:
+            tfm = x(aug_input)
+            tfms.append(tfm)
+        return TransformList(tfms)
+
+    def __repr__(self):
+        msgs = [str(x) for x in self.augs]
+        return "AugmentationList[{}]".format(", ".join(msgs))
+
+    __str__ = __repr__
 
 
 class AugInput:
@@ -202,7 +289,7 @@ class AugInput:
       For example, if a :class:`Augmentation` to be applied needs "image" and "sem_seg"
       arguments, this class must have the attribute "image" and "sem_seg" whose content
       is as required by the :class:`Augmentation`s.
-    * This class must have a :meth:`transform(tfm: Transform) -> None` method which
+    * This class must have a ``transform(tfm: Transform) -> None`` method which
       in-place transforms all attributes stored in the class.
     """
 
@@ -221,28 +308,7 @@ class AugInput:
                 returns transformed inputs and the list of transforms applied.
                 The TransformList can then be applied to other data associated with the inputs.
         """
-        tfms = []
-        for aug in augmentations:
-            if isinstance(aug, Augmentation):
-                args = []
-                for f in aug.input_args:
-                    try:
-                        args.append(getattr(self, f))
-                    except AttributeError:
-                        raise AttributeError(
-                            f"Augmentation {aug} needs '{f}', which is not an attribute of {self}!"
-                        )
-
-                tfm = aug.get_transform(*args)
-                assert isinstance(tfm, Transform), (
-                    f"{type(aug)}.get_transform must return an instance of Transform! "
-                    "Got {type(tfm)} instead."
-                )
-            else:
-                tfm = aug
-            self.transform(tfm)
-            tfms.append(tfm)
-        return TransformList(tfms)
+        return AugmentationList(augmentations)(self)
 
 
 class StandardAugInput(AugInput):
@@ -270,10 +336,11 @@ class StandardAugInput(AugInput):
     An extended project that works with new data types may require augmentation
     policies that need more inputs. An algorithm may need to transform inputs
     in a way different from the standard approach defined in this class. In those
-    situations, users can implement new subclasses of :class:`AugInput` with differnt
+    situations, users can implement new subclasses of :class:`AugInput` with different
     attributes and the :meth:`transform` method.
     """
 
+    # TODO maybe should support more builtin data types here
     def __init__(
         self,
         image: np.ndarray,
@@ -322,4 +389,9 @@ def apply_augmentations(augmentations: List[Union[Transform, Augmentation]], inp
 apply_transform_gens = apply_augmentations
 """
 Alias for backward-compatibility.
+"""
+
+TransformGen = Augmentation
+"""
+Alias for Augmentation, since it is something that generates :class:`Transform`s
 """

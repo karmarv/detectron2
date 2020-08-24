@@ -4,6 +4,7 @@ import numpy as np
 from enum import IntEnum, unique
 from typing import Any, List, Tuple, Union
 import torch
+from torch import device
 
 _RawBoxType = Union[List[float], Tuple[float, ...], torch.Tensor, np.ndarray]
 
@@ -297,7 +298,7 @@ class Boxes:
         return cat_boxes
 
     @property
-    def device(self) -> torch.device:
+    def device(self) -> device:
         return self.tensor.device
 
     # type "Iterator[torch.Tensor]", yield, and iter() not supported by torchscript
@@ -318,7 +319,6 @@ def pairwise_iou(boxes1: Boxes, boxes2: Boxes) -> torch.Tensor:
     compute the IoU (intersection over union)
     between __all__ N x M pairs of boxes.
     The box order must be (xmin, ymin, xmax, ymax).
-
     Args:
         boxes1,boxes2 (Boxes): two `Boxes`. Contains N & M boxes, respectively.
 
@@ -352,11 +352,12 @@ def matched_boxlist_iou(boxes1: Boxes, boxes2: Boxes) -> torch.Tensor:
     Compute pairwise intersection over union (IOU) of two sets of matched
     boxes. The box order must be (xmin, ymin, xmax, ymax).
     Similar to boxlist_iou, but computes only diagonal elements of the matrix
-    Arguments:
+
+    Args:
         boxes1: (Boxes) bounding boxes, sized [N,4].
         boxes2: (Boxes) bounding boxes, sized [N,4].
     Returns:
-        (tensor) iou, sized [N].
+        Tensor: iou, sized [N].
     """
     assert len(boxes1) == len(
         boxes2

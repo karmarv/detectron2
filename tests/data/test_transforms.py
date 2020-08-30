@@ -128,8 +128,6 @@ class TestTransforms(unittest.TestCase):
 
         # define two augmentations with different args
         class TG1(T.Augmentation):
-            input_args = ("image", "sem_seg")
-
             def get_transform(self, image, sem_seg):
                 return T.ResizeTransform(
                     input_shape[0], input_shape[1], output_shape[0], output_shape[1]
@@ -142,7 +140,7 @@ class TestTransforms(unittest.TestCase):
 
         image = np.random.rand(*input_shape).astype("float32")
         sem_seg = (np.random.rand(*input_shape) < 0.5).astype("uint8")
-        inputs = T.StandardAugInput(image, sem_seg=sem_seg)  # provide two args
+        inputs = T.AugInput(image, sem_seg=sem_seg)  # provide two args
         tfms = inputs.apply_augmentations([TG1(), TG2()])
         self.assertIsInstance(tfms[0], T.ResizeTransform)
         self.assertIsInstance(tfms[1], T.HFlipTransform)
@@ -150,8 +148,6 @@ class TestTransforms(unittest.TestCase):
         self.assertTrue(inputs.sem_seg.shape[:2] == output_shape)
 
         class TG3(T.Augmentation):
-            input_args = ("image", "nonexist")
-
             def get_transform(self, image, nonexist):
                 pass
 
@@ -162,7 +158,7 @@ class TestTransforms(unittest.TestCase):
         input_shape = (100, 100)
         image = np.random.rand(*input_shape).astype("float32")
         sem_seg = (np.random.rand(*input_shape) < 0.5).astype("uint8")
-        inputs = T.StandardAugInput(image, sem_seg=sem_seg)  # provide two args
+        inputs = T.AugInput(image, sem_seg=sem_seg)  # provide two args
 
         augs = T.AugmentationList([T.RandomFlip(), T.Resize(20)])
         _ = T.AugmentationList([augs, T.Resize(30)])(inputs)

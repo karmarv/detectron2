@@ -7,7 +7,7 @@ MODEL:
     NAME: "build_resnet_deeplab_backbone"
   RESNETS:
     DEPTH: 101
-    NORM: "SyncBN"
+    NORM: "BN"
     OUT_FEATURES: ["res2", "res5"]
     RES5_MULTI_GRID: [1, 2, 4]
     STEM_TYPE: "deeplab"
@@ -18,5 +18,5 @@ MODEL:
     IN_FEATURES: ["res2", "res5"]
     PROJECT_FEATURES: ["res2"]
     PROJECT_CHANNELS: [48]
-    NORM: "SyncBN"
+    NORM: "BN"
     COMMON_STRIDE: 4

@@ -25,7 +25,7 @@ from detectron2.data import DatasetCatalog, MetadataCatalog
 from modet.data.datasets.builtin_meta import _get_builtin_metadata
 from modet.data.datasets.cityscapes import load_cityscapes_instances, load_cityscapes_semantic
 from modet.data.datasets.register_coco import register_coco_instances, register_coco_panoptic_separated
-from modet.data.datasets.rdd import load_images_ann_dicts
+
 
 # ==== Predefined datasets and splits for COCO ==========
 
@@ -176,38 +176,7 @@ def register_all_cityscapes(root):
         )
 
 
-
-# ==== Predefined splits for raw grc images ===========
-
-_PREDEFINED_SPLITS_RDD_MD = {}
-_PREDEFINED_SPLITS_RDD_MD["rdd"] = {
-    "rdd2020_val"  : ( "RoadDamageDataset/val/Czech", 
-                       "RoadDamageDataset/val/India", 
-                       "RoadDamageDataset/val/Japan"),
-    "rdd2020_train": ( "RoadDamageDataset/train/Czech", 
-                       "RoadDamageDataset/train/India", 
-                       "RoadDamageDataset/train/Japan")
-}
-
-def register_all_rdd_datasets(root):
-    logger = logging.getLogger(__name__)
-    logger.info("[MoDet] Register GRC in COCO format from {}".format(root))
-    meta = _get_builtin_metadata("rdd")
-    for dataset_name, splits_per_dataset in _PREDEFINED_SPLITS_RDD_MD["rdd"].items():
-        inst_key = "{}".format(dataset_name)
-        d = dataset_name.split("_")[1]
-        print(dataset_name, "\t", splits_per_dataset)
-        #load_images_ann_dicts(_root, dataset_name, splits_per_dataset)
-        DatasetCatalog.register(
-            inst_key,
-            lambda d=d: load_images_ann_dicts(root, splits_per_dataset),
-        )
-        MetadataCatalog.get(inst_key).set(evaluator_type="coco", **meta) 
-    return None
-
-
 # Register them all under "./datasets"
 _root = os.getenv("DETECTRON2_DATASETS", "datasets")
 register_all_coco_md(_root)
 register_all_cityscapes(_root)
-register_all_rdd_datasets(_root)

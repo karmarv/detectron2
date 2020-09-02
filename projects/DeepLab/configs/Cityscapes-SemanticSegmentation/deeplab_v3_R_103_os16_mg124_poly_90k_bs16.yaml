@@ -7,12 +7,12 @@ MODEL:
     NAME: "build_resnet_deeplab_backbone"
   RESNETS:
     DEPTH: 101
-    NORM: "SyncBN"
+    NORM: "BN"
     RES5_MULTI_GRID: [1, 2, 4]
     STEM_TYPE: "deeplab"
     STEM_OUT_CHANNELS: 128
     STRIDE_IN_1X1: False
   SEM_SEG_HEAD:
     NAME: "DeepLabV3Head"
-    NORM: "SyncBN"
+    NORM: "BN"
 

@@ -357,9 +357,5 @@ def _get_builtin_metadata(dataset_name):
         }
     elif dataset_name == "cityscapes_md_panoptic":
         return _get_cityscape_panoptic_separated_meta()
-    elif dataset_name == "rdd":
-        from modet.data.datasets.rdd import get_rdd_coco_instances_meta
-        return get_rdd_coco_instances_meta()
-        
 
     raise KeyError("No built-in metadata for dataset {}".format(dataset_name))

@@ -17,7 +17,7 @@ from detectron2.config import get_cfg
 from detectron2.data import DatasetMapper, MetadataCatalog, build_detection_train_loader
 from detectron2.engine import DefaultTrainer, default_argument_parser, default_setup, launch
 from detectron2.evaluation import CityscapesSemSegEvaluator, DatasetEvaluators, SemSegEvaluator
-from detectron2.projects.deeplab import add_deeplab_config, build_lr_scheduler
+from deeplab import add_deeplab_config, build_lr_scheduler
 
 
 def build_sem_seg_train_aug(cfg):
@@ -127,7 +127,9 @@ def main(args):
     trainer.resume_or_load(resume=args.resume)
     return trainer.train()
 
-
+"""
+    python train_net.py --config-file configs/Cityscapes-SemanticSegmentation/deeplab_v3_plus_R_103_os16_mg124_poly_90k_bs16.yaml
+"""
 if __name__ == "__main__":
     args = default_argument_parser().parse_args()
     print("Command Line Args:", args)

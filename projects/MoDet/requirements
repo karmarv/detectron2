@@ -7,7 +7,7 @@ torch-model-archiver
 tensorboard
 
 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cu101/torch1.6/index.html
-detectron2==0.2 
+detectron2
 
 numpy==1.19.0
 requests~=2.21.0

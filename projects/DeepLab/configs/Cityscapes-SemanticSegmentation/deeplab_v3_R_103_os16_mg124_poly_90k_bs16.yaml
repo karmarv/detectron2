@@ -14,5 +14,6 @@ MODEL:
     STRIDE_IN_1X1: False
   SEM_SEG_HEAD:
     NAME: "DeepLabV3Head"
-    NORM: "BN"
-
+    NORM: "SyncBN"
+INPUT:
+  FORMAT: "RGB"

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 
 """
 Common data processing utilities that are used in a
@@ -7,9 +7,9 @@ typical object detection data pipeline.
 """
 import logging
 import numpy as np
+from typing import List, Union
 import pycocotools.mask as mask_util
 import torch
-from fvcore.common.file_io import PathManager
 from PIL import Image
 
 from detectron2.structures import (
@@ -22,6 +22,7 @@ from detectron2.structures import (
     RotatedBoxes,
     polygons_to_bitmask,
 )
+from detectron2.utils.file_io import PathManager
 
 from . import transforms as T
 from .catalog import MetadataCatalog
@@ -172,7 +173,8 @@ def read_image(file_name, format=None):
         format (str): one of the supported image modes in PIL, or "BGR" or "YUV-BT.601".
 
     Returns:
-        image (np.ndarray): an HWC image in the given format, which is 0-255, uint8 for
+        image (np.ndarray):
+            an HWC image in the given format, which is 0-255, uint8 for
             supported image modes in PIL or "BGR"; float (0-1 for Y) for YUV-BT.601.
     """
     with PathManager.open(file_name, "rb") as f:
@@ -192,13 +194,14 @@ def check_image_size(dataset_dict, image):
         expected_wh = (dataset_dict["width"], dataset_dict["height"])
         if not image_wh == expected_wh:
             raise SizeMismatchError(
-                "Mismatched (W,H){}, got {}, expect {}".format(
+                "Mismatched image shape{}, got {}, expect {}.".format(
                     " for image " + dataset_dict["file_name"]
                     if "file_name" in dataset_dict
                     else "",
                     image_wh,
                     expected_wh,
                 )
+                + " Please check the width/height in your annotation."
             )
 
     # To ensure bbox always remap to original image size
@@ -350,7 +353,7 @@ def transform_keypoint_annotations(keypoints, transforms, image_size, keypoint_h
     # If flipped, swap each keypoint with its opposite-handed equivalent
     if do_hflip:
         assert keypoint_hflip_indices is not None
-        keypoints = keypoints[keypoint_hflip_indices, :]
+        keypoints = keypoints[np.asarray(keypoint_hflip_indices, dtype=np.int32), :]
 
     # Maintain COCO convention that if visibility == 0 (unlabeled), then x, y = 0
     keypoints[keypoints[:, 2] == 0] = 0
@@ -384,8 +387,12 @@ def annotations_to_instances(annos, image_size, mask_format="polygon"):
     if len(annos) and "segmentation" in annos[0]:
         segms = [obj["segmentation"] for obj in annos]
         if mask_format == "polygon":
-            # TODO check type and provide better error
-            masks = PolygonMasks(segms)
+            try:
+                masks = PolygonMasks(segms)
+            except ValueError as e:
+                raise ValueError(
+                    "Failed to use mask_format=='polygon' from the given annotations!"
+                ) from e
         else:
             assert mask_format == "bitmask", mask_format
             masks = []
@@ -406,8 +413,8 @@ def annotations_to_instances(annos, image_size, mask_format="polygon"):
                     raise ValueError(
                         "Cannot convert segmentation of type '{}' to BitMasks!"
                         "Supported types are: polygons as list[list[float] or ndarray],"
-                        " COCO-style RLE as a dict, or a full-image segmentation mask "
-                        "as a 2D ndarray.".format(type(segm))
+                        " COCO-style RLE as a dict, or a binary segmentation mask "
+                        " in a 2D numpy array of shape HxW.".format(type(segm))
                     )
             # torch.from_numpy does not support array with negative stride.
             masks = BitMasks(
@@ -451,7 +458,9 @@ def annotations_to_instances_rotated(annos, image_size):
     return target
 
 
-def filter_empty_instances(instances, by_box=True, by_mask=True, box_threshold=1e-5):
+def filter_empty_instances(
+    instances, by_box=True, by_mask=True, box_threshold=1e-5, return_mask=False
+):
     """
     Filter out empty instances in an `Instances` object.
 
@@ -460,9 +469,11 @@ def filter_empty_instances(instances, by_box=True, by_mask=True, box_threshold=1
         by_box (bool): whether to filter out instances with empty boxes
         by_mask (bool): whether to filter out instances with empty masks
         box_threshold (float): minimum width and height to be considered non-empty
+        return_mask (bool): whether to return boolean mask of filtered instances
 
     Returns:
         Instances: the filtered instances.
+        tensor[bool], optional: boolean mask of filtered instances
     """
     assert by_box or by_mask
     r = []
@@ -478,17 +489,22 @@ def filter_empty_instances(instances, by_box=True, by_mask=True, box_threshold=1
     m = r[0]
     for x in r[1:]:
         m = m & x
+    if return_mask:
+        return instances[m], m
     return instances[m]
 
 
-def create_keypoint_hflip_indices(dataset_names):
+def create_keypoint_hflip_indices(dataset_names: Union[str, List[str]]) -> List[int]:
     """
     Args:
-        dataset_names (list[str]): list of dataset names
+        dataset_names: list of dataset names
+
     Returns:
-        ndarray[int]: a vector of size=#keypoints, storing the
+        list[int]: a list of size=#keypoints, storing the
         horizontally-flipped keypoint indices.
     """
+    if isinstance(dataset_names, str):
+        dataset_names = [dataset_names]
 
     check_metadata_consistency("keypoint_names", dataset_names)
     check_metadata_consistency("keypoint_flip_map", dataset_names)
@@ -500,7 +516,7 @@ def create_keypoint_hflip_indices(dataset_names):
     flip_map.update({v: k for k, v in flip_map.items()})
     flipped_names = [i if i not in flip_map else flip_map[i] for i in names]
     flip_indices = [names.index(i) for i in flipped_names]
-    return np.asarray(flip_indices, dtype=np.int32)
+    return flip_indices
 
 
 def gen_crop_transform_with_instance(crop_size, image_size, instance):
@@ -579,8 +595,13 @@ def build_augmentation(cfg, is_train):
         max_size = cfg.INPUT.MAX_SIZE_TEST
         sample_style = "choice"
     augmentation = [T.ResizeShortestEdge(min_size, max_size, sample_style)]
-    if is_train:
-        augmentation.append(T.RandomFlip())
+    if is_train and cfg.INPUT.RANDOM_FLIP != "none":
+        augmentation.append(
+            T.RandomFlip(
+                horizontal=cfg.INPUT.RANDOM_FLIP == "horizontal",
+                vertical=cfg.INPUT.RANDOM_FLIP == "vertical",
+            )
+        )
     return augmentation
 
 

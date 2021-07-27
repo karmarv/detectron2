@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 
 import datetime
 import itertools
@@ -7,16 +7,19 @@ import logging
 import os
 import tempfile
 import time
+import warnings
 from collections import Counter
 import torch
 from fvcore.common.checkpoint import PeriodicCheckpointer as _PeriodicCheckpointer
-from fvcore.common.file_io import PathManager
+from fvcore.common.param_scheduler import ParamScheduler
 from fvcore.common.timer import Timer
 from fvcore.nn.precise_bn import get_bn_modules, update_bn_stats
 
 import detectron2.utils.comm as comm
 from detectron2.evaluation.testing import flatten_results_dict
+from detectron2.solver import LRMultiplier
 from detectron2.utils.events import EventStorage, EventWriter
+from detectron2.utils.file_io import PathManager
 
 from .train_loop import HookBase
 
@@ -29,6 +32,7 @@ __all__ = [
     "AutogradProfiler",
     "EvalHook",
     "PreciseBN",
+    "TorchProfiler",
 ]
 
 
@@ -106,7 +110,7 @@ class IterationTimer(HookBase):
         total_time_minus_hooks = self._total_timer.seconds()
         hook_time = total_time - total_time_minus_hooks
 
-        num_iter = self.trainer.iter + 1 - self.trainer.start_iter - self._warmup_iter
+        num_iter = self.trainer.storage.iter + 1 - self.trainer.start_iter - self._warmup_iter
 
         if num_iter > 0 and total_time_minus_hooks > 0:
             # Speed is meaningful only after warmup
@@ -131,8 +135,9 @@ class IterationTimer(HookBase):
         self._total_timer.resume()
 
     def after_step(self):
-        # +1 because we're in after_step
-        iter_done = self.trainer.iter - self.trainer.start_iter + 1
+        # +1 because we're in after_step, the current step is done
+        # but not yet counted
+        iter_done = self.trainer.storage.iter - self.trainer.start_iter + 1
         if iter_done >= self._warmup_iter:
             sec = self._step_timer.seconds()
             self.trainer.storage.put_scalars(time=sec)
@@ -171,6 +176,9 @@ class PeriodicWriter(HookBase):
 
     def after_train(self):
         for writer in self._writers:
+            # If any new data is found (e.g. produced by other after_train),
+            # write them before closing
+            writer.write()
             writer.close()
 
 
@@ -199,15 +207,32 @@ class LRScheduler(HookBase):
     It is executed after every iteration.
     """
 
-    def __init__(self, optimizer, scheduler):
+    def __init__(self, optimizer=None, scheduler=None):
         """
         Args:
             optimizer (torch.optim.Optimizer):
-            scheduler (torch.optim._LRScheduler)
+            scheduler (torch.optim.LRScheduler or fvcore.common.param_scheduler.ParamScheduler):
+                if a :class:`ParamScheduler` object, it defines the multiplier over the base LR
+                in the optimizer.
+
+        If any argument is not given, will try to obtain it from the trainer.
         """
         self._optimizer = optimizer
         self._scheduler = scheduler
 
+    def before_train(self):
+        self._optimizer = self._optimizer or self.trainer.optimizer
+        if isinstance(self.scheduler, ParamScheduler):
+            self._scheduler = LRMultiplier(
+                self._optimizer,
+                self.scheduler,
+                self.trainer.max_iter,
+                last_iter=self.trainer.iter - 1,
+            )
+        self._best_param_group_id = LRScheduler.get_best_param_group_id(self._optimizer)
+
+    @staticmethod
+    def get_best_param_group_id(optimizer):
         # NOTE: some heuristics on what LR to summarize
         # summarize the param group with most parameters
         largest_group = max(len(g["params"]) for g in optimizer.param_groups)
@@ -219,59 +244,86 @@ class LRScheduler(HookBase):
             lr = lr_count.most_common()[0][0]
             for i, g in enumerate(optimizer.param_groups):
                 if g["lr"] == lr:
-                    self._best_param_group_id = i
-                    break
+                    return i
         else:
             for i, g in enumerate(optimizer.param_groups):
                 if len(g["params"]) == largest_group:
-                    self._best_param_group_id = i
-                    break
+                    return i
 
     def after_step(self):
         lr = self._optimizer.param_groups[self._best_param_group_id]["lr"]
         self.trainer.storage.put_scalar("lr", lr, smoothing_hint=False)
-        self._scheduler.step()
+        self.scheduler.step()
+
+    @property
+    def scheduler(self):
+        return self._scheduler or self.trainer.scheduler
+
+    def state_dict(self):
+        if isinstance(self.scheduler, torch.optim.lr_scheduler._LRScheduler):
+            return self.scheduler.state_dict()
+        return {}
+
+    def load_state_dict(self, state_dict):
+        if isinstance(self.scheduler, torch.optim.lr_scheduler._LRScheduler):
+            logger = logging.getLogger(__name__)
+            logger.info("Loading scheduler from state_dict ...")
+            self.scheduler.load_state_dict(state_dict)
 
 
-class AutogradProfiler(HookBase):
+class TorchProfiler(HookBase):
     """
-    A hook which runs `torch.autograd.profiler.profile`.
+    A hook which runs `torch.profiler.profile`.
 
     Examples:
     ::
-        hooks.AutogradProfiler(
-             lambda trainer: trainer.iter > 10 and trainer.iter < 20, self.cfg.OUTPUT_DIR
+        hooks.TorchProfiler(
+             lambda trainer: 10 < trainer.iter < 20, self.cfg.OUTPUT_DIR
         )
 
     The above example will run the profiler for iteration 10~20 and dump
     results to ``OUTPUT_DIR``. We did not profile the first few iterations
     because they are typically slower than the rest.
-    The result files can be loaded in the ``chrome://tracing`` page in chrome browser.
-
-    Note:
-        When used together with NCCL on older version of GPUs,
-        autograd profiler may cause deadlock because it unnecessarily allocates
-        memory on every device it sees. The memory management calls, if
-        interleaved with NCCL calls, lead to deadlock on GPUs that do not
-        support ``cudaLaunchCooperativeKernelMultiDevice``.
+    The result files can be loaded in the ``chrome://tracing`` page in chrome browser,
+    and the tensorboard visualizations can be visualized using
+    ``tensorboard --logdir OUTPUT_DIR/log``
     """
 
-    def __init__(self, enable_predicate, output_dir, *, use_cuda=True):
+    def __init__(self, enable_predicate, output_dir, *, activities=None, save_tensorboard=True):
         """
         Args:
             enable_predicate (callable[trainer -> bool]): a function which takes a trainer,
                 and returns whether to enable the profiler.
                 It will be called once every step, and can be used to select which steps to profile.
             output_dir (str): the output directory to dump tracing files.
-            use_cuda (bool): same as in `torch.autograd.profiler.profile`.
+            activities (iterable): same as in `torch.profiler.profile`.
+            save_tensorboard (bool): whether to save tensorboard visualizations at (output_dir)/log/
         """
         self._enable_predicate = enable_predicate
-        self._use_cuda = use_cuda
+        self._activities = activities
         self._output_dir = output_dir
+        self._save_tensorboard = save_tensorboard
 
     def before_step(self):
         if self._enable_predicate(self.trainer):
-            self._profiler = torch.autograd.profiler.profile(use_cuda=self._use_cuda)
+            if self._save_tensorboard:
+                on_trace_ready = torch.profiler.tensorboard_trace_handler(
+                    os.path.join(
+                        self._output_dir,
+                        "log",
+                        "profiler-tensorboard-iter{}".format(self.trainer.iter),
+                    )
+                )
+            else:
+                on_trace_ready = None
+            self._profiler = torch.profiler.profile(
+                activities=self._activities,
+                on_trace_ready=on_trace_ready,
+                record_shapes=True,
+                profile_memory=True,
+                with_stack=True,
+                with_flops=True,
+            )
             self._profiler.__enter__()
         else:
             self._profiler = None
@@ -297,6 +349,51 @@ class AutogradProfiler(HookBase):
                 f.write(content)
 
 
+class AutogradProfiler(TorchProfiler):
+    """
+    A hook which runs `torch.autograd.profiler.profile`.
+
+    Examples:
+    ::
+        hooks.AutogradProfiler(
+             lambda trainer: 10 < trainer.iter < 20, self.cfg.OUTPUT_DIR
+        )
+
+    The above example will run the profiler for iteration 10~20 and dump
+    results to ``OUTPUT_DIR``. We did not profile the first few iterations
+    because they are typically slower than the rest.
+    The result files can be loaded in the ``chrome://tracing`` page in chrome browser.
+
+    Note:
+        When used together with NCCL on older version of GPUs,
+        autograd profiler may cause deadlock because it unnecessarily allocates
+        memory on every device it sees. The memory management calls, if
+        interleaved with NCCL calls, lead to deadlock on GPUs that do not
+        support ``cudaLaunchCooperativeKernelMultiDevice``.
+    """
+
+    def __init__(self, enable_predicate, output_dir, *, use_cuda=True):
+        """
+        Args:
+            enable_predicate (callable[trainer -> bool]): a function which takes a trainer,
+                and returns whether to enable the profiler.
+                It will be called once every step, and can be used to select which steps to profile.
+            output_dir (str): the output directory to dump tracing files.
+            use_cuda (bool): same as in `torch.autograd.profiler.profile`.
+        """
+        warnings.warn("AutogradProfiler has been deprecated in favor of TorchProfiler.")
+        self._enable_predicate = enable_predicate
+        self._use_cuda = use_cuda
+        self._output_dir = output_dir
+
+    def before_step(self):
+        if self._enable_predicate(self.trainer):
+            self._profiler = torch.autograd.profiler.profile(use_cuda=self._use_cuda)
+            self._profiler.__enter__()
+        else:
+            self._profiler = None
+
+
 class EvalHook(HookBase):
     """
     Run an evaluation function periodically, and at the end of training.
@@ -307,7 +404,8 @@ class EvalHook(HookBase):
     def __init__(self, eval_period, eval_function):
         """
         Args:
-            eval_period (int): the period to run `eval_function`.
+            eval_period (int): the period to run `eval_function`. Set to 0 to
+                not evaluate periodically (but still after the last iteration).
             eval_function (callable): a function which takes no arguments, and
                 returns a nested dict of evaluation metrics.
 
@@ -344,11 +442,15 @@ class EvalHook(HookBase):
 
     def after_step(self):
         next_iter = self.trainer.iter + 1
-        is_final = next_iter == self.trainer.max_iter
-        if is_final or (self._period > 0 and next_iter % self._period == 0):
-            self._do_eval()
+        if self._period > 0 and next_iter % self._period == 0:
+            # do the last eval in after_train
+            if next_iter != self.trainer.max_iter:
+                self._do_eval()
 
     def after_train(self):
+        # This condition is to prevent the eval from running after a failed training
+        if self.trainer.iter + 1 >= self.trainer.max_iter:
+            self._do_eval()
         # func is likely a closure that holds reference to the trainer
         # therefore we clean it to avoid circular reference in the end
         del self._func

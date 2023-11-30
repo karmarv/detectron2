@@ -148,7 +148,10 @@ class DensePoseBaseSampler:
         I = (
             (
                 F.interpolate(
-                    output.fine_segm, (sz, sz), mode="bilinear", align_corners=False
+                    output.fine_segm,
+                    (sz, sz),
+                    mode="bilinear",
+                    align_corners=False,
                 ).argmax(dim=1)
                 * (S > 0).long()
             )

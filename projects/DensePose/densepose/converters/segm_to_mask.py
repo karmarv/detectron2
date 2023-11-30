@@ -49,7 +49,10 @@ def resample_fine_and_coarse_segm_tensors_to_bbox(
     h = max(int(h), 1)
     # coarse segmentation
     coarse_segm_bbox = F.interpolate(
-        coarse_segm, (h, w), mode="bilinear", align_corners=False
+        coarse_segm,
+        (h, w),
+        mode="bilinear",
+        align_corners=False,
     ).argmax(dim=1)
     # combined coarse and fine segmentation
     labels = (

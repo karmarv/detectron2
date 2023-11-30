@@ -21,6 +21,7 @@ from fvcore.nn.precise_bn import get_bn_modules, update_bn_stats
 import detectron2.utils.comm as comm
 from detectron2.evaluation.testing import flatten_results_dict
 from detectron2.solver import LRMultiplier
+from detectron2.solver import LRScheduler as _LRScheduler
 from detectron2.utils.events import EventStorage, EventWriter
 from detectron2.utils.file_io import PathManager
 
@@ -276,7 +277,7 @@ class BestCheckpointer(HookBase):
             additional_state = {"iteration": metric_iter}
             self._checkpointer.save(f"{self._file_prefix}", **additional_state)
             self._logger.info(
-                f"Saved best model as latest eval score for {self._val_metric} is"
+                f"Saved best model as latest eval score for {self._val_metric} is "
                 f"{latest_metric:0.5f}, better than last best score "
                 f"{self.best_metric:0.5f} @ iteration {self.best_iter}."
             )
@@ -362,12 +363,12 @@ class LRScheduler(HookBase):
         return self._scheduler or self.trainer.scheduler
 
     def state_dict(self):
-        if isinstance(self.scheduler, torch.optim.lr_scheduler._LRScheduler):
+        if isinstance(self.scheduler, _LRScheduler):
             return self.scheduler.state_dict()
         return {}
 
     def load_state_dict(self, state_dict):
-        if isinstance(self.scheduler, torch.optim.lr_scheduler._LRScheduler):
+        if isinstance(self.scheduler, _LRScheduler):
             logger = logging.getLogger(__name__)
             logger.info("Loading scheduler from state_dict ...")
             self.scheduler.load_state_dict(state_dict)
@@ -414,7 +415,8 @@ class TorchProfiler(HookBase):
                         self._output_dir,
                         "log",
                         "profiler-tensorboard-iter{}".format(self.trainer.iter),
-                    )
+                    ),
+                    f"worker{comm.get_rank()}",
                 )
             else:
                 on_trace_ready = None
@@ -434,21 +436,22 @@ class TorchProfiler(HookBase):
         if self._profiler is None:
             return
         self._profiler.__exit__(None, None, None)
-        PathManager.mkdirs(self._output_dir)
-        out_file = os.path.join(
-            self._output_dir, "profiler-trace-iter{}.json".format(self.trainer.iter)
-        )
-        if "://" not in out_file:
-            self._profiler.export_chrome_trace(out_file)
-        else:
-            # Support non-posix filesystems
-            with tempfile.TemporaryDirectory(prefix="detectron2_profiler") as d:
-                tmp_file = os.path.join(d, "tmp.json")
-                self._profiler.export_chrome_trace(tmp_file)
-                with open(tmp_file) as f:
-                    content = f.read()
-            with PathManager.open(out_file, "w") as f:
-                f.write(content)
+        if not self._save_tensorboard:
+            PathManager.mkdirs(self._output_dir)
+            out_file = os.path.join(
+                self._output_dir, "profiler-trace-iter{}.json".format(self.trainer.iter)
+            )
+            if "://" not in out_file:
+                self._profiler.export_chrome_trace(out_file)
+            else:
+                # Support non-posix filesystems
+                with tempfile.TemporaryDirectory(prefix="detectron2_profiler") as d:
+                    tmp_file = os.path.join(d, "tmp.json")
+                    self._profiler.export_chrome_trace(tmp_file)
+                    with open(tmp_file) as f:
+                        content = f.read()
+                with PathManager.open(out_file, "w") as f:
+                    f.write(content)
 
 
 class AutogradProfiler(TorchProfiler):
@@ -503,13 +506,15 @@ class EvalHook(HookBase):
     It is executed every ``eval_period`` iterations and after the last iteration.
     """
 
-    def __init__(self, eval_period, eval_function):
+    def __init__(self, eval_period, eval_function, eval_after_train=True):
         """
         Args:
             eval_period (int): the period to run `eval_function`. Set to 0 to
-                not evaluate periodically (but still after the last iteration).
+                not evaluate periodically (but still evaluate after the last iteration
+                if `eval_after_train` is True).
             eval_function (callable): a function which takes no arguments, and
                 returns a nested dict of evaluation metrics.
+            eval_after_train (bool): whether to evaluate after the last iteration
 
         Note:
             This hook must be enabled in all or none workers.
@@ -518,6 +523,7 @@ class EvalHook(HookBase):
         """
         self._period = eval_period
         self._func = eval_function
+        self._eval_after_train = eval_after_train
 
     def _do_eval(self):
         results = self._func()
@@ -551,7 +557,7 @@ class EvalHook(HookBase):
 
     def after_train(self):
         # This condition is to prevent the eval from running after a failed training
-        if self.trainer.iter + 1 >= self.trainer.max_iter:
+        if self._eval_after_train and self.trainer.iter + 1 >= self.trainer.max_iter:
             self._do_eval()
         # func is likely a closure that holds reference to the trainer
         # therefore we clean it to avoid circular reference in the end

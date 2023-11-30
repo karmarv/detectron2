@@ -123,7 +123,7 @@ Run on multiple machines:
     # PyTorch still may leave orphan processes in multi-gpu training.
     # Therefore we use a deterministic way to obtain port,
     # so that users are aware of orphan processes by seeing the port occupied.
-    port = 2 ** 15 + 2 ** 14 + hash(os.getuid() if sys.platform != "win32" else 1) % 2 ** 14
+    port = 2**15 + 2**14 + hash(os.getuid() if sys.platform != "win32" else 1) % 2**14
     parser.add_argument(
         "--dist-url",
         default="tcp://127.0.0.1:{}".format(port),
@@ -240,6 +240,7 @@ def default_writers(output_dir: str, max_iter: Optional[int] = None):
     Returns:
         list[EventWriter]: a list of :class:`EventWriter` objects.
     """
+    PathManager.mkdirs(output_dir)
     return [
         # It may not always print what you want to see, since it prints "common" metrics only.
         CommonMetricPrinter(max_iter),
@@ -311,8 +312,10 @@ class DefaultPredictor:
             height, width = original_image.shape[:2]
             image = self.aug.get_transform(original_image).apply_image(original_image)
             image = torch.as_tensor(image.astype("float32").transpose(2, 0, 1))
+            image.to(self.cfg.MODEL.DEVICE)
 
             inputs = {"image": image, "height": height, "width": width}
+
             predictions = self.model([inputs])[0]
             return predictions
 
@@ -491,6 +494,15 @@ class DefaultTrainer(TrainerBase):
     def run_step(self):
         self._trainer.iter = self.iter
         self._trainer.run_step()
+
+    def state_dict(self):
+        ret = super().state_dict()
+        ret["_trainer"] = self._trainer.state_dict()
+        return ret
+
+    def load_state_dict(self, state_dict):
+        super().load_state_dict(state_dict)
+        self._trainer.load_state_dict(state_dict["_trainer"])
 
     @classmethod
     def build_model(cls, cfg):

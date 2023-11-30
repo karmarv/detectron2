@@ -5,7 +5,7 @@ import torch
 
 from detectron2.layers.rotated_boxes import pairwise_iou_rotated
 
-from .boxes import Boxes, _maybe_jit_unused
+from .boxes import Boxes
 
 
 class RotatedBoxes(Boxes):
@@ -229,7 +229,6 @@ class RotatedBoxes(Boxes):
         """
         return RotatedBoxes(self.tensor.clone())
 
-    @_maybe_jit_unused
     def to(self, device: torch.device):
         # Boxes are assumed float32 and does not support to(dtype)
         return RotatedBoxes(self.tensor.to(device=device))
@@ -245,11 +244,13 @@ class RotatedBoxes(Boxes):
         area = box[:, 2] * box[:, 3]
         return area
 
+    # Avoid in-place operations so that we can torchscript; NOTE: this creates a new tensor
     def normalize_angles(self) -> None:
         """
         Restrict angles to the range of [-180, 180) degrees
         """
-        self.tensor[:, 4] = (self.tensor[:, 4] + 180.0) % 360.0 - 180.0
+        angle_tensor = (self.tensor[:, 4] + 180.0) % 360.0 - 180.0
+        self.tensor = torch.cat((self.tensor[:, :4], angle_tensor[:, None]), dim=1)
 
     def clip(self, box_size: Tuple[int, int], clip_angle_threshold: float = 1.0) -> None:
         """
@@ -455,7 +456,6 @@ class RotatedBoxes(Boxes):
         self.tensor[:, 4] = torch.atan2(scale_x * s, scale_y * c) * 180 / math.pi
 
     @classmethod
-    @_maybe_jit_unused
     def cat(cls, boxes_list: List["RotatedBoxes"]) -> "RotatedBoxes":
         """
         Concatenates a list of RotatedBoxes into a single RotatedBoxes

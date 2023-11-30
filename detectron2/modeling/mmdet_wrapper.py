@@ -45,7 +45,6 @@ class MMDetBackbone(Backbone):
         backbone: Union[nn.Module, Mapping],
         neck: Union[nn.Module, Mapping, None] = None,
         *,
-        pretrained_backbone: Optional[str] = None,
         output_shapes: List[ShapeSpec],
         output_names: Optional[List[str]] = None,
     ):
@@ -57,8 +56,6 @@ class MMDetBackbone(Backbone):
             neck: either a backbone module or a mmdet config dict that defines a
                 neck. The neck takes outputs of backbone and returns a
                 sequence of tensors. If None, no neck is used.
-            pretrained_backbone: defines the backbone weights that can be loaded by
-                mmdet, such as "torchvision://resnet50".
             output_shapes: shape for every output of the backbone (or neck, if given).
                 stride and channels are often needed.
             output_names: names for every output of the backbone (or neck, if given).
@@ -77,12 +74,11 @@ class MMDetBackbone(Backbone):
             neck = build_neck(_to_container(neck))
         self.neck = neck
 
-        # It's confusing that backbone weights are given as a separate argument,
-        # but "neck" weights, if any, are part of neck itself. This is the interface
+        # "Neck" weights, if any, are part of neck itself. This is the interface
         # of mmdet so we follow it. Reference:
         # https://github.com/open-mmlab/mmdetection/blob/master/mmdet/models/detectors/two_stage.py
-        logger.info(f"Initializing mmdet backbone weights: {pretrained_backbone} ...")
-        self.backbone.init_weights(pretrained_backbone)
+        logger.info("Initializing mmdet backbone weights...")
+        self.backbone.init_weights()
         # train() in mmdet modules is non-trivial, and has to be explicitly
         # called. Reference:
         # https://github.com/open-mmlab/mmdetection/blob/master/mmdet/models/backbones/resnet.py
@@ -149,6 +145,7 @@ class MMDetDetector(nn.Module):
 
             detector = build_detector(_to_container(detector))
         self.detector = detector
+        self.detector.init_weights()
         self.size_divisibility = size_divisibility
 
         self.register_buffer("pixel_mean", torch.tensor(pixel_mean).view(-1, 1, 1), False)

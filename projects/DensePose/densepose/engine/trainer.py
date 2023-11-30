@@ -77,7 +77,6 @@ class Trainer(DefaultTrainer):
         if isinstance(model, nn.parallel.DistributedDataParallel):
             model = model.module
         if hasattr(model, "roi_heads") and hasattr(model.roi_heads, "embedder"):
-            # pyre-fixme[16]: `Tensor` has no attribute `embedder`.
             return model.roi_heads.embedder
         return None
 
@@ -211,6 +210,7 @@ class Trainer(DefaultTrainer):
             nesterov=cfg.SOLVER.NESTEROV,
             weight_decay=cfg.SOLVER.WEIGHT_DECAY,
         )
+        # pyre-fixme[6]: For 2nd param expected `Type[Optimizer]` but got `SGD`.
         return maybe_add_gradient_clipping(cfg, optimizer)
 
     @classmethod

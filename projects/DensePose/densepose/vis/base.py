@@ -8,7 +8,7 @@ Image = np.ndarray
 Boxes = torch.Tensor
 
 
-class MatrixVisualizer(object):
+class MatrixVisualizer:
     """
     Base visualizer for matrix data
     """
@@ -74,7 +74,7 @@ class MatrixVisualizer(object):
         assert mask.dtype == np.uint8
 
 
-class RectangleVisualizer(object):
+class RectangleVisualizer:
 
     _COLOR_GREEN = (18, 127, 15)
 
@@ -90,7 +90,7 @@ class RectangleVisualizer(object):
         return image_bgr
 
 
-class PointsVisualizer(object):
+class PointsVisualizer:
 
     _COLOR_GREEN = (18, 127, 15)
 
@@ -107,7 +107,7 @@ class PointsVisualizer(object):
         return image_bgr
 
 
-class TextVisualizer(object):
+class TextVisualizer:
 
     _COLOR_GRAY = (218, 227, 218)
     _COLOR_WHITE = (255, 255, 255)
@@ -146,12 +146,12 @@ class TextVisualizer(object):
                 image_bgr[y - t : y + txt_h + t, x - t : x + txt_w + t, :]
                 * self.frame_color_transparency
                 + np.array(self.frame_color_bgr) * (1.0 - self.frame_color_transparency)
-            ).astype(np.float)
+            ).astype(float)
         if self.fill_color_transparency < 1.0:
             image_bgr[y : y + txt_h, x : x + txt_w, :] = (
                 image_bgr[y : y + txt_h, x : x + txt_w, :] * self.fill_color_transparency
                 + np.array(self.fill_color_bgr) * (1.0 - self.fill_color_transparency)
-            ).astype(np.float)
+            ).astype(float)
         cv2.putText(
             image_bgr,
             txt,
@@ -171,7 +171,7 @@ class TextVisualizer(object):
         return txt_w, txt_h
 
 
-class CompoundVisualizer(object):
+class CompoundVisualizer:
     def __init__(self, visualizers):
         self.visualizers = visualizers
 

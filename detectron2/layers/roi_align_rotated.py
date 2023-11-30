@@ -5,8 +5,6 @@ from torch.autograd import Function
 from torch.autograd.function import once_differentiable
 from torch.nn.modules.utils import _pair
 
-from detectron2 import _C
-
 
 class _ROIAlignRotated(Function):
     @staticmethod
@@ -16,7 +14,7 @@ class _ROIAlignRotated(Function):
         ctx.spatial_scale = spatial_scale
         ctx.sampling_ratio = sampling_ratio
         ctx.input_shape = input.size()
-        output = _C.roi_align_rotated_forward(
+        output = torch.ops.detectron2.roi_align_rotated_forward(
             input, roi, spatial_scale, output_size[0], output_size[1], sampling_ratio
         )
         return output
@@ -29,7 +27,7 @@ class _ROIAlignRotated(Function):
         spatial_scale = ctx.spatial_scale
         sampling_ratio = ctx.sampling_ratio
         bs, ch, h, w = ctx.input_shape
-        grad_input = _C.roi_align_rotated_backward(
+        grad_input = torch.ops.detectron2.roi_align_rotated_backward(
             grad_output,
             rois,
             spatial_scale,
@@ -80,6 +78,15 @@ class ROIAlignRotated(nn.Module):
         if orig_dtype == torch.float16:
             input = input.float()
             rois = rois.float()
+        output_size = _pair(self.output_size)
+
+        # Scripting for Autograd is currently unsupported.
+        # This is a quick fix without having to rewrite code on the C++ side
+        if torch.jit.is_scripting() or torch.jit.is_tracing():
+            return torch.ops.detectron2.roi_align_rotated_forward(
+                input, rois, self.spatial_scale, output_size[0], output_size[1], self.sampling_ratio
+            ).to(dtype=orig_dtype)
+
         return roi_align_rotated(
             input, rois, self.output_size, self.spatial_scale, self.sampling_ratio
         ).to(dtype=orig_dtype)

@@ -6,17 +6,7 @@ from typing import List, Tuple, Union
 import torch
 from torch import device
 
-from detectron2.utils.env import TORCH_VERSION
-
 _RawBoxType = Union[List[float], Tuple[float, ...], torch.Tensor, np.ndarray]
-
-
-if TORCH_VERSION < (1, 8):
-    _maybe_jit_unused = torch.jit.unused
-else:
-
-    def _maybe_jit_unused(x):
-        return x
 
 
 @unique
@@ -154,12 +144,14 @@ class Boxes:
         Args:
             tensor (Tensor[float]): a Nx4 matrix.  Each row is (x1, y1, x2, y2).
         """
-        device = tensor.device if isinstance(tensor, torch.Tensor) else torch.device("cpu")
-        tensor = torch.as_tensor(tensor, dtype=torch.float32, device=device)
+        if not isinstance(tensor, torch.Tensor):
+            tensor = torch.as_tensor(tensor, dtype=torch.float32, device=torch.device("cpu"))
+        else:
+            tensor = tensor.to(torch.float32)
         if tensor.numel() == 0:
             # Use reshape, so we don't end up creating a new tensor that does not depend on
             # the inputs (and consequently confuses jit)
-            tensor = tensor.reshape((-1, 4)).to(dtype=torch.float32, device=device)
+            tensor = tensor.reshape((-1, 4)).to(dtype=torch.float32)
         assert tensor.dim() == 2 and tensor.size(-1) == 4, tensor.size()
 
         self.tensor = tensor
@@ -173,7 +165,6 @@ class Boxes:
         """
         return Boxes(self.tensor.clone())
 
-    @_maybe_jit_unused
     def to(self, device: torch.device):
         # Boxes are assumed float32 and does not support to(dtype)
         return Boxes(self.tensor.to(device=device))
@@ -285,7 +276,6 @@ class Boxes:
         self.tensor[:, 1::2] *= scale_y
 
     @classmethod
-    @_maybe_jit_unused
     def cat(cls, boxes_list: List["Boxes"]) -> "Boxes":
         """
         Concatenates a list of Boxes into a single Boxes

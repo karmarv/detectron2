@@ -137,7 +137,10 @@ def resample_confidences_to_bbox(
     # assign data from channels that correspond to the labels
     for key in confidence_names:
         resampled_confidence = F.interpolate(
-            getattr(predictor_output, key), (h, w), mode="bilinear", align_corners=False
+            getattr(predictor_output, key),
+            (h, w),
+            mode="bilinear",
+            align_corners=False,
         )
         result = confidence_base.clone()
         for part_id in range(1, predictor_output.u.size(1)):

@@ -28,10 +28,12 @@ def polygons_to_bitmask(polygons: List[np.ndarray], height: int, width: int) -> 
     Returns:
         ndarray: a bool mask of shape (height, width)
     """
-    assert len(polygons) > 0, "COCOAPI does not support empty polygons"
+    if len(polygons) == 0:
+        # COCOAPI does not support empty polygons
+        return np.zeros((height, width)).astype(bool)
     rles = mask_util.frPyObjects(polygons, height, width)
     rle = mask_util.merge(rles)
-    return mask_util.decode(rle).astype(np.bool)
+    return mask_util.decode(rle).astype(bool)
 
 
 def rasterize_polygons_within_box(
@@ -97,8 +99,10 @@ class BitMasks:
         Args:
             tensor: bool Tensor of N,H,W, representing N instances in the image.
         """
-        device = tensor.device if isinstance(tensor, torch.Tensor) else torch.device("cpu")
-        tensor = torch.as_tensor(tensor, dtype=torch.bool, device=device)
+        if isinstance(tensor, torch.Tensor):
+            tensor = tensor.to(torch.bool)
+        else:
+            tensor = torch.as_tensor(tensor, dtype=torch.bool, device=torch.device("cpu"))
         assert tensor.dim() == 3, tensor.size()
         self.image_size = tensor.shape[1:]
         self.tensor = tensor
@@ -128,7 +132,7 @@ class BitMasks:
         subject to Pytorch's indexing semantics.
         """
         if isinstance(item, int):
-            return BitMasks(self.tensor[item].view(1, -1))
+            return BitMasks(self.tensor[item].unsqueeze(0))
         m = self.tensor[item]
         assert m.dim() == 3, "Indexing on BitMasks with {} returns a tensor with shape {}!".format(
             item, m.shape
@@ -170,7 +174,10 @@ class BitMasks:
         if isinstance(polygon_masks, PolygonMasks):
             polygon_masks = polygon_masks.polygons
         masks = [polygons_to_bitmask(p, height, width) for p in polygon_masks]
-        return BitMasks(torch.stack([torch.from_numpy(x) for x in masks]))
+        if len(masks):
+            return BitMasks(torch.stack([torch.from_numpy(x) for x in masks]))
+        else:
+            return BitMasks(torch.empty(0, height, width, dtype=torch.bool))
 
     @staticmethod
     def from_roi_masks(roi_masks: "ROIMasks", height: int, width: int) -> "BitMasks":
@@ -336,7 +343,7 @@ class PolygonMasks:
                 a BoolTensor which represents whether each mask is empty (False) or not (True).
         """
         keep = [1 if len(polygon) > 0 else 0 for polygon in self.polygons]
-        return torch.from_numpy(np.asarray(keep, dtype=np.bool))
+        return torch.from_numpy(np.asarray(keep, dtype=bool))
 
     def __getitem__(self, item: Union[int, slice, List[int], torch.BoolTensor]) -> "PolygonMasks":
         """
@@ -512,16 +519,16 @@ class ROIMasks:
     @torch.jit.unused
     def to_bitmasks(self, boxes: torch.Tensor, height, width, threshold=0.5):
         """
-        Args:
-
+        Args: see documentation of :func:`paste_masks_in_image`.
         """
-        from detectron2.layers import paste_masks_in_image
+        from detectron2.layers.mask_ops import paste_masks_in_image, _paste_masks_tensor_shape
 
-        paste = retry_if_cuda_oom(paste_masks_in_image)
-        bitmasks = paste(
-            self.tensor,
-            boxes,
-            (height, width),
-            threshold=threshold,
-        )
+        if torch.jit.is_tracing():
+            if isinstance(height, torch.Tensor):
+                paste_func = _paste_masks_tensor_shape
+            else:
+                paste_func = paste_masks_in_image
+        else:
+            paste_func = retry_if_cuda_oom(paste_masks_in_image)
+        bitmasks = paste_func(self.tensor, boxes.tensor, (height, width), threshold=threshold)
         return BitMasks(bitmasks)

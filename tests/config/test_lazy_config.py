@@ -5,11 +5,13 @@ import tempfile
 from itertools import count
 
 from detectron2.config import LazyConfig, LazyCall as L
+from omegaconf import DictConfig
 
 
 class TestLazyPythonConfig(unittest.TestCase):
     def setUp(self):
-        self.root_filename = os.path.join(os.path.dirname(__file__), "root_cfg.py")
+        self.curr_dir = os.path.dirname(__file__)
+        self.root_filename = os.path.join(self.curr_dir, "root_cfg.py")
 
     def test_load(self):
         cfg = LazyConfig.load(self.root_filename)
@@ -37,11 +39,22 @@ class TestLazyPythonConfig(unittest.TestCase):
         # the rest are equal
         self.assertEqual(cfg, cfg2)
 
+    def test_failed_save(self):
+        cfg = DictConfig({"x": lambda: 3}, flags={"allow_objects": True})
+        with tempfile.TemporaryDirectory(prefix="detectron2") as d:
+            fname = os.path.join(d, "test_config.yaml")
+            LazyConfig.save(cfg, fname)
+            self.assertTrue(os.path.exists(fname))
+            self.assertTrue(os.path.exists(fname + ".pkl"))
+
     def test_overrides(self):
         cfg = LazyConfig.load(self.root_filename)
         LazyConfig.apply_overrides(cfg, ["lazyobj.x=123", 'dir1b_dict.a="123"'])
         self.assertEqual(cfg.dir1b_dict.a, "123")
         self.assertEqual(cfg.lazyobj.x, 123)
+
+        LazyConfig.apply_overrides(cfg, ["dir1b_dict.a=abc"])
+        self.assertEqual(cfg.dir1b_dict.a, "abc")
 
     def test_invalid_overrides(self):
         cfg = LazyConfig.load(self.root_filename)
@@ -68,3 +81,18 @@ cfg.lazyobj = itertools.count(
 cfg.list = ["a", 1, "b", 3.2]
 """
         self.assertEqual(py_str, expected)
+
+    def test_bad_import(self):
+        file = os.path.join(self.curr_dir, "dir1", "bad_import.py")
+        with self.assertRaisesRegex(ImportError, "relative import"):
+            LazyConfig.load(file)
+
+    def test_bad_import2(self):
+        file = os.path.join(self.curr_dir, "dir1", "bad_import2.py")
+        with self.assertRaisesRegex(ImportError, "not exist"):
+            LazyConfig.load(file)
+
+    def test_load_rel(self):
+        file = os.path.join(self.curr_dir, "dir1", "load_rel.py")
+        cfg = LazyConfig.load(file)
+        self.assertIn("x", cfg)

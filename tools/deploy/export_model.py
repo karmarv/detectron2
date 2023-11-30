@@ -12,9 +12,8 @@ from detectron2.config import get_cfg
 from detectron2.data import build_detection_test_loader, detection_utils
 from detectron2.evaluation import COCOEvaluator, inference_on_dataset, print_csv_format
 from detectron2.export import (
-    Caffe2Tracer,
+    STABLE_ONNX_OPSET_VERSION,
     TracingAdapter,
-    add_export_config,
     dump_torchscript_IR,
     scripting_with_instances,
 )
@@ -31,7 +30,6 @@ def setup_cfg(args):
     cfg = get_cfg()
     # cuda context is initialized before creating dataloader, so we don't fork anymore
     cfg.DATALOADER.NUM_WORKERS = 0
-    cfg = add_export_config(cfg)
     add_pointrend_config(cfg)
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
@@ -40,6 +38,8 @@ def setup_cfg(args):
 
 
 def export_caffe2_tracing(cfg, torch_model, inputs):
+    from detectron2.export import Caffe2Tracer
+
     tracer = Caffe2Tracer(cfg, torch_model, inputs)
     if args.format == "caffe2":
         caffe2_model = tracer.export_caffe2()
@@ -129,7 +129,7 @@ def export_tracing(torch_model, inputs):
         dump_torchscript_IR(ts_model, args.output)
     elif args.format == "onnx":
         with PathManager.open(os.path.join(args.output, "model.onnx"), "wb") as f:
-            torch.onnx.export(traceable_model, (image,), f, opset_version=11)
+            torch.onnx.export(traceable_model, (image,), f, opset_version=STABLE_ONNX_OPSET_VERSION)
     logger.info("Inputs schema: " + str(traceable_model.inputs_schema))
     logger.info("Outputs schema: " + str(traceable_model.outputs_schema))
 
@@ -182,13 +182,13 @@ if __name__ == "__main__":
         "--format",
         choices=["caffe2", "onnx", "torchscript"],
         help="output format",
-        default="caffe2",
+        default="torchscript",
     )
     parser.add_argument(
         "--export-method",
         choices=["caffe2_tracing", "tracing", "scripting"],
         help="Method to export models",
-        default="caffe2_tracing",
+        default="tracing",
     )
     parser.add_argument("--config-file", default="", metavar="FILE", help="path to config file")
     parser.add_argument("--sample-image", default=None, type=str, help="sample image for input")
@@ -204,7 +204,7 @@ if __name__ == "__main__":
     logger = setup_logger()
     logger.info("Command line arguments: " + str(args))
     PathManager.mkdirs(args.output)
-    # Disable respecialization on new shapes. Otherwise --run-eval will be slow
+    # Disable re-specialization on new shapes. Otherwise --run-eval will be slow
     torch._C._jit_set_bailout_depth(1)
 
     cfg = setup_cfg(args)
@@ -214,15 +214,14 @@ if __name__ == "__main__":
     DetectionCheckpointer(torch_model).resume_or_load(cfg.MODEL.WEIGHTS)
     torch_model.eval()
 
-    # get sample data
-    sample_inputs = get_sample_inputs(args)
-
     # convert and save model
     if args.export_method == "caffe2_tracing":
+        sample_inputs = get_sample_inputs(args)
         exported_model = export_caffe2_tracing(cfg, torch_model, sample_inputs)
     elif args.export_method == "scripting":
         exported_model = export_scripting(torch_model)
     elif args.export_method == "tracing":
+        sample_inputs = get_sample_inputs(args)
         exported_model = export_tracing(torch_model, sample_inputs)
 
     # run evaluation with the converted model
@@ -238,3 +237,4 @@ if __name__ == "__main__":
         evaluator = COCOEvaluator(dataset, output_dir=args.output)
         metrics = inference_on_dataset(exported_model, data_loader, evaluator)
         print_csv_format(metrics)
+    logger.info("Success.")

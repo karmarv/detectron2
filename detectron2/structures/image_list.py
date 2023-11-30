@@ -1,25 +1,14 @@
 # Copyright (c) Facebook, Inc. and its affiliates.
 from __future__ import division
-from typing import Any, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import torch
 from torch import device
 from torch.nn import functional as F
 
-
-def _as_tensor(x: Tuple[int, int]) -> torch.Tensor:
-    """
-    An equivalent of `torch.as_tensor`, but works under tracing if input
-    is a list of tensor. `torch.as_tensor` will record a constant in tracing,
-    but this function will use `torch.stack` instead.
-    """
-    if torch.jit.is_scripting():
-        return torch.as_tensor(x)
-    if isinstance(x, (list, tuple)) and all([isinstance(t, torch.Tensor) for t in x]):
-        return torch.stack(x)
-    return torch.as_tensor(x)
+from detectron2.layers.wrappers import move_device_like, shapes_to_tensor
 
 
-class ImageList(object):
+class ImageList:
     """
     Structure that holds a list of images (of possibly
     varying sizes) as a single tensor.
@@ -68,7 +57,10 @@ class ImageList(object):
 
     @staticmethod
     def from_tensors(
-        tensors: List[torch.Tensor], size_divisibility: int = 0, pad_value: float = 0.0
+        tensors: List[torch.Tensor],
+        size_divisibility: int = 0,
+        pad_value: float = 0.0,
+        padding_constraints: Optional[Dict[str, int]] = None,
     ) -> "ImageList":
         """
         Args:
@@ -78,8 +70,11 @@ class ImageList(object):
             size_divisibility (int): If `size_divisibility > 0`, add padding to ensure
                 the common height and width is divisible by `size_divisibility`.
                 This depends on the model and many models need a divisibility of 32.
-            pad_value (float): value to pad
-
+            pad_value (float): value to pad.
+            padding_constraints (optional[Dict]): If given, it would follow the format as
+                {"size_divisibility": int, "square_size": int}, where `size_divisibility` will
+                overwrite the above one if presented and `square_size` indicates the
+                square padding size if `square_size` > 0.
         Returns:
             an `ImageList`.
         """
@@ -90,13 +85,20 @@ class ImageList(object):
             assert t.shape[:-2] == tensors[0].shape[:-2], t.shape
 
         image_sizes = [(im.shape[-2], im.shape[-1]) for im in tensors]
-        image_sizes_tensor = [_as_tensor(x) for x in image_sizes]
+        image_sizes_tensor = [shapes_to_tensor(x) for x in image_sizes]
         max_size = torch.stack(image_sizes_tensor).max(0).values
 
+        if padding_constraints is not None:
+            square_size = padding_constraints.get("square_size", 0)
+            if square_size > 0:
+                # pad to square.
+                max_size[0] = max_size[1] = square_size
+            if "size_divisibility" in padding_constraints:
+                size_divisibility = padding_constraints["size_divisibility"]
         if size_divisibility > 1:
             stride = size_divisibility
             # the last two dims are H,W, both subject to divisibility requirement
-            max_size = (max_size + (stride - 1)) // stride * stride
+            max_size = (max_size + (stride - 1)).div(stride, rounding_mode="floor") * stride
 
         # handle weirdness of scripting and tracing ...
         if torch.jit.is_scripting():
@@ -114,8 +116,14 @@ class ImageList(object):
         else:
             # max_size can be a tensor in tracing mode, therefore convert to list
             batch_shape = [len(tensors)] + list(tensors[0].shape[:-2]) + list(max_size)
-            batched_imgs = tensors[0].new_full(batch_shape, pad_value)
-            for img, pad_img in zip(tensors, batched_imgs):
-                pad_img[..., : img.shape[-2], : img.shape[-1]].copy_(img)
+            device = (
+                None if torch.jit.is_scripting() else ("cpu" if torch.jit.is_tracing() else None)
+            )
+            batched_imgs = tensors[0].new_full(batch_shape, pad_value, device=device)
+            batched_imgs = move_device_like(batched_imgs, tensors[0])
+            for i, img in enumerate(tensors):
+                # Use `batched_imgs` directly instead of `img, pad_img = zip(tensors, batched_imgs)`
+                # Tracing mode cannot capture `copy_()` of temporary locals
+                batched_imgs[i, ..., : img.shape[-2], : img.shape[-1]].copy_(img)
 
         return ImageList(batched_imgs.contiguous(), image_sizes)

@@ -1,9 +1,13 @@
 # Copyright (c) Facebook, Inc. and its affiliates.
 
+import copy
+import glob
 import json
 import os
+import random
 import tempfile
 import unittest
+import zipfile
 import torch
 from torch import Tensor, nn
 
@@ -24,6 +28,8 @@ from detectron2.utils.testing import (
     convert_scripted_instances,
     get_sample_coco_image,
     random_boxes,
+    reload_script_model,
+    skipIfOnCPUCI,
 )
 
 
@@ -33,11 +39,11 @@ contains some explanations of this file.
 """
 
 
-@unittest.skipIf(TORCH_VERSION < (1, 8), "Insufficient Pytorch version")
 class TestScripting(unittest.TestCase):
     def testMaskRCNNFPN(self):
         self._test_rcnn_model("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
 
+    @skipIfOnCPUCI
     def testMaskRCNNC4(self):
         self._test_rcnn_model("COCO-InstanceSegmentation/mask_rcnn_R_50_C4_3x.yaml")
 
@@ -57,8 +63,12 @@ class TestScripting(unittest.TestCase):
             "pred_masks": Tensor,
         }
         script_model = scripting_with_instances(model, fields)
+        script_model = reload_script_model(script_model)
 
-        inputs = [{"image": get_sample_coco_image()}] * 2
+        # Test that batch inference with different shapes are supported
+        image = get_sample_coco_image()
+        small_image = nn.functional.interpolate(image, scale_factor=0.5)
+        inputs = [{"image": image}, {"image": small_image}]
         with torch.no_grad():
             instance = model.inference(inputs, do_postprocess=False)[0]
             scripted_instance = script_model.inference(inputs, do_postprocess=False)[0]
@@ -86,16 +96,23 @@ class TestScripting(unittest.TestCase):
         # https://github.com/pytorch/pytorch/issues/46944
 
 
-@unittest.skipIf(TORCH_VERSION < (1, 8), "Insufficient Pytorch version")
+# TODO: this test requires manifold access, see: T88318502
 class TestTracing(unittest.TestCase):
     def testMaskRCNNFPN(self):
-        # TODO: this test requires manifold access, see: T88318502
         def inference_func(model, image):
             inputs = [{"image": image}]
             return model.inference(inputs, do_postprocess=False)[0]
 
         self._test_model("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml", inference_func)
 
+    def testMaskRCNNFPN_with_postproc(self):
+        def inference_func(model, image):
+            inputs = [{"image": image, "height": image.shape[1], "width": image.shape[2]}]
+            return model.inference(inputs, do_postprocess=True)[0]["instances"]
+
+        self._test_model("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml", inference_func)
+
+    @skipIfOnCPUCI
     def testMaskRCNNC4(self):
         def inference_func(model, image):
             inputs = [{"image": image}]
@@ -103,27 +120,94 @@ class TestTracing(unittest.TestCase):
 
         self._test_model("COCO-InstanceSegmentation/mask_rcnn_R_50_C4_3x.yaml", inference_func)
 
+    @skipIfOnCPUCI
+    def testCascadeRCNN(self):
+        def inference_func(model, image):
+            inputs = [{"image": image}]
+            return model.inference(inputs, do_postprocess=False)[0]
+
+        self._test_model("Misc/cascade_mask_rcnn_R_50_FPN_3x.yaml", inference_func)
+
+    # bug fixed by https://github.com/pytorch/pytorch/pull/67734
+    @unittest.skipIf(TORCH_VERSION == (1, 10) and os.environ.get("CI"), "1.10 has bugs.")
     def testRetinaNet(self):
-        # TODO: this test requires manifold access, see: T88318502
         def inference_func(model, image):
             return model.forward([{"image": image}])[0]["instances"]
 
         self._test_model("COCO-Detection/retinanet_R_50_FPN_3x.yaml", inference_func)
 
-    def _test_model(self, config_path, inference_func):
+    def _check_torchscript_no_hardcoded_device(self, jitfile, extract_dir, device):
+        zipfile.ZipFile(jitfile).extractall(extract_dir)
+        dir_path = os.path.join(extract_dir, os.path.splitext(os.path.basename(jitfile))[0])
+        error_files = []
+        for f in glob.glob(f"{dir_path}/code/**/*.py", recursive=True):
+            content = open(f).read()
+            if device in content:
+                error_files.append((f, content))
+        if len(error_files):
+            msg = "\n".join(f"{f}\n{content}" for f, content in error_files)
+            raise ValueError(f"Found device '{device}' in following files:\n{msg}")
+
+    def _get_device_casting_test_cases(self, model):
+        # Indexing operation can causes hardcoded device type before 1.10
+        if not TORCH_VERSION >= (1, 10) or torch.cuda.device_count() == 0:
+            return [None]
+
+        testing_devices = ["cpu", "cuda:0"]
+        if torch.cuda.device_count() > 1:
+            testing_devices.append(f"cuda:{torch.cuda.device_count() - 1}")
+        assert str(model.device) in testing_devices
+        testing_devices.remove(str(model.device))
+        testing_devices = [None] + testing_devices  # test no casting first
+
+        return testing_devices
+
+    def _test_model(self, config_path, inference_func, batch=1):
         model = model_zoo.get(config_path, trained=True)
         image = get_sample_coco_image()
+        inputs = tuple(image.clone() for _ in range(batch))
 
-        wrapper = TracingAdapter(model, image, inference_func)
+        wrapper = TracingAdapter(model, inputs, inference_func)
         wrapper.eval()
         with torch.no_grad():
-            small_image = nn.functional.interpolate(image, scale_factor=0.5)
-            # trace with a different image, and the trace must still work
-            traced_model = torch.jit.trace(wrapper, (small_image,))
+            # trace with smaller images, and the trace must still work
+            trace_inputs = tuple(
+                nn.functional.interpolate(image, scale_factor=random.uniform(0.5, 0.7))
+                for _ in range(batch)
+            )
+            traced_model = torch.jit.trace(wrapper, trace_inputs)
 
-            output = inference_func(model, image)
-            traced_output = wrapper.outputs_schema(traced_model(image))
-        assert_instances_allclose(output, traced_output, size_as_tensor=True)
+        testing_devices = self._get_device_casting_test_cases(model)
+        # save and load back the model in order to show traceback of TorchScript
+        with tempfile.TemporaryDirectory(prefix="detectron2_test") as d:
+            basename = "model"
+            jitfile = f"{d}/{basename}.jit"
+            torch.jit.save(traced_model, jitfile)
+            traced_model = torch.jit.load(jitfile)
+
+            if any(device and "cuda" in device for device in testing_devices):
+                self._check_torchscript_no_hardcoded_device(jitfile, d, "cuda")
+
+        for device in testing_devices:
+            print(f"Testing casting to {device} for inference (traced on {model.device}) ...")
+            with torch.no_grad():
+                outputs = inference_func(copy.deepcopy(model).to(device), *inputs)
+                traced_outputs = wrapper.outputs_schema(traced_model.to(device)(*inputs))
+            if batch > 1:
+                for output, traced_output in zip(outputs, traced_outputs):
+                    assert_instances_allclose(output, traced_output, size_as_tensor=True)
+            else:
+                assert_instances_allclose(outputs, traced_outputs, size_as_tensor=True)
+
+    @skipIfOnCPUCI
+    def testMaskRCNNFPN_batched(self):
+        def inference_func(model, image1, image2):
+            inputs = [{"image": image1}, {"image": image2}]
+            return model.inference(inputs, do_postprocess=False)
+
+        self._test_model(
+            "COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml", inference_func, batch=2
+        )
 
     def testKeypointHead(self):
         class M(nn.Module):

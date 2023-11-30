@@ -4,17 +4,6 @@ from typing import Any, List, Tuple, Union
 import torch
 from torch.nn import functional as F
 
-from detectron2.utils.env import TORCH_VERSION
-
-if TORCH_VERSION < (1, 8):
-
-    def script_if_tracing(fn):
-        return fn
-
-
-else:
-    script_if_tracing = torch.jit.script_if_tracing
-
 
 class Keypoints:
     """
@@ -172,7 +161,7 @@ def _keypoints_to_heatmap(
     return heatmaps, valid
 
 
-@script_if_tracing
+@torch.jit.script_if_tracing
 def heatmaps_to_keypoints(maps: torch.Tensor, rois: torch.Tensor) -> torch.Tensor:
     """
     Extract predicted keypoint locations from heatmaps.
@@ -190,10 +179,6 @@ def heatmaps_to_keypoints(maps: torch.Tensor, rois: torch.Tensor) -> torch.Tenso
     we maintain consistency with :meth:`Keypoints.to_heatmap` by using the conversion from
     Heckbert 1990: c = d + 0.5, where d is a discrete coordinate and c is a continuous coordinate.
     """
-    # The decorator use of torch.no_grad() was not supported by torchscript.
-    # https://github.com/pytorch/pytorch/issues/44768
-    maps = maps.detach()
-    rois = rois.detach()
 
     offset_x = rois[:, 0]
     offset_y = rois[:, 1]
@@ -213,11 +198,11 @@ def heatmaps_to_keypoints(maps: torch.Tensor, rois: torch.Tensor) -> torch.Tenso
 
     for i in range(num_rois):
         outsize = (int(heights_ceil[i]), int(widths_ceil[i]))
-        roi_map = F.interpolate(
-            maps[[i]], size=outsize, mode="bicubic", align_corners=False
-        ).squeeze(
-            0
-        )  # #keypoints x H x W
+        roi_map = F.interpolate(maps[[i]], size=outsize, mode="bicubic", align_corners=False)
+
+        # Although semantically equivalent, `reshape` is used instead of `squeeze` due
+        # to limitation during ONNX export of `squeeze` in scripting mode
+        roi_map = roi_map.reshape(roi_map.shape[1:])  # keypoints x H x W
 
         # softmax over the spatial region
         max_score, _ = roi_map.view(num_keypoints, -1).max(1)

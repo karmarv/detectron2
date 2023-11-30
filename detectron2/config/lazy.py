@@ -1,18 +1,20 @@
 # Copyright (c) Facebook, Inc. and its affiliates.
+
 import ast
 import builtins
+import collections.abc as abc
 import importlib
 import inspect
 import logging
 import os
 import uuid
-from collections import abc
 from contextlib import contextmanager
 from copy import deepcopy
+from dataclasses import is_dataclass
 from typing import List, Tuple, Union
 import cloudpickle
 import yaml
-from omegaconf import DictConfig, ListConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf, SCMode
 
 from detectron2.utils.file_io import PathManager
 from detectron2.utils.registry import _convert_target_to_string
@@ -40,12 +42,19 @@ class LazyCall:
     def __init__(self, target):
         if not (callable(target) or isinstance(target, (str, abc.Mapping))):
             raise TypeError(
-                "target of LazyCall must be a callable or defines a callable! Got {target}"
+                f"target of LazyCall must be a callable or defines a callable! Got {target}"
             )
         self._target = target
 
     def __call__(self, **kwargs):
-        kwargs["_target_"] = self._target
+        if is_dataclass(self._target):
+            # omegaconf object cannot hold dataclass type
+            # https://github.com/omry/omegaconf/issues/784
+            target = _convert_target_to_string(self._target)
+        else:
+            target = self._target
+        kwargs["_target_"] = target
+
         return DictConfig(content=kwargs, flags={"allow_objects": True})
 
 
@@ -97,28 +106,41 @@ def _patch_import():
     1. locate files purely based on relative location, regardless of packages.
        e.g. you can import file without having __init__
     2. do not cache modules globally; modifications of module states has no side effect
-    3. support other storage system through PathManager
+    3. support other storage system through PathManager, so config files can be in the cloud
     4. imported dict are turned into omegaconf.DictConfig automatically
     """
     old_import = builtins.__import__
 
     def find_relative_file(original_file, relative_import_path, level):
+        # NOTE: "from . import x" is not handled. Because then it's unclear
+        # if such import should produce `x` as a python module or DictConfig.
+        # This can be discussed further if needed.
+        relative_import_err = """
+Relative import of directories is not allowed within config files.
+Within a config file, relative import can only import other config files.
+""".replace(
+            "\n", " "
+        )
+        if not len(relative_import_path):
+            raise ImportError(relative_import_err)
+
         cur_file = os.path.dirname(original_file)
         for _ in range(level - 1):
             cur_file = os.path.dirname(cur_file)
         cur_name = relative_import_path.lstrip(".")
         for part in cur_name.split("."):
             cur_file = os.path.join(cur_file, part)
-        # NOTE: directory import is not handled. Because then it's unclear
-        # if such import should produce python module or DictConfig. This can
-        # be discussed further if needed.
         if not cur_file.endswith(".py"):
             cur_file += ".py"
         if not PathManager.isfile(cur_file):
-            raise ImportError(
-                f"Cannot import name {relative_import_path} from "
-                f"{original_file}: {cur_file} has to exist."
-            )
+            cur_file_no_suffix = cur_file[: -len(".py")]
+            if PathManager.isdir(cur_file_no_suffix):
+                raise ImportError(f"Cannot import from {cur_file_no_suffix}." + relative_import_err)
+            else:
+                raise ImportError(
+                    f"Cannot import name {relative_import_path} from "
+                    f"{original_file}: {cur_file} does not exist."
+                )
         return cur_file
 
     def new_import(name, globals=None, locals=None, fromlist=(), level=0):
@@ -151,7 +173,7 @@ def _patch_import():
 
 class LazyConfig:
     """
-    Provid methods to save, load, and overrides an omegaconf config object
+    Provide methods to save, load, and overrides an omegaconf config object
     which may contain definition of lazily-constructed objects.
     """
 
@@ -255,19 +277,40 @@ class LazyConfig:
             # not necessary, but makes yaml looks nicer
             _visit_dict_config(cfg, _replace_type_by_name)
 
+        save_pkl = False
         try:
+            dict = OmegaConf.to_container(
+                cfg,
+                # Do not resolve interpolation when saving, i.e. do not turn ${a} into
+                # actual values when saving.
+                resolve=False,
+                # Save structures (dataclasses) in a format that can be instantiated later.
+                # Without this option, the type information of the dataclass will be erased.
+                structured_config_mode=SCMode.INSTANTIATE,
+            )
+            dumped = yaml.dump(dict, default_flow_style=None, allow_unicode=True, width=9999)
             with PathManager.open(filename, "w") as f:
-                dict = OmegaConf.to_container(cfg, resolve=False)
-                dumped = yaml.dump(dict, default_flow_style=None, allow_unicode=True, width=9999)
                 f.write(dumped)
+
+            try:
+                _ = yaml.unsafe_load(dumped)  # test that it is loadable
+            except Exception:
+                logger.warning(
+                    "The config contains objects that cannot serialize to a valid yaml. "
+                    f"{filename} is human-readable but cannot be loaded."
+                )
+                save_pkl = True
         except Exception:
             logger.exception("Unable to serialize the config to yaml. Error:")
+            save_pkl = True
+
+        if save_pkl:
             new_filename = filename + ".pkl"
             try:
                 # retry by pickle
                 with PathManager.open(new_filename, "wb") as f:
                     cloudpickle.dump(cfg, f)
-                logger.warning(f"Config saved using cloudpickle at {new_filename} ...")
+                logger.warning(f"Config is saved using cloudpickle at {new_filename}.")
             except Exception:
                 pass
 
@@ -300,17 +343,32 @@ class LazyConfig:
                     )
             OmegaConf.update(cfg, key, value, merge=True)
 
-        from hydra.core.override_parser.overrides_parser import OverridesParser
+        try:
+            from hydra.core.override_parser.overrides_parser import OverridesParser
 
-        parser = OverridesParser.create()
-        overrides = parser.parse_overrides(overrides)
-        for o in overrides:
-            key = o.key_or_group
-            value = o.value()
-            if o.is_delete():
-                # TODO support this
-                raise NotImplementedError("deletion is not yet a supported override")
-            safe_update(cfg, key, value)
+            has_hydra = True
+        except ImportError:
+            has_hydra = False
+
+        if has_hydra:
+            parser = OverridesParser.create()
+            overrides = parser.parse_overrides(overrides)
+            for o in overrides:
+                key = o.key_or_group
+                value = o.value()
+                if o.is_delete():
+                    # TODO support this
+                    raise NotImplementedError("deletion is not yet a supported override")
+                safe_update(cfg, key, value)
+        else:
+            # Fallback. Does not support all the features and error checking like hydra.
+            for o in overrides:
+                key, value = o.split("=")
+                try:
+                    value = eval(value, {})
+                except NameError:
+                    pass
+                safe_update(cfg, key, value)
         return cfg
 
     @staticmethod

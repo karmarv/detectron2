@@ -23,12 +23,11 @@ def detector_postprocess(
             `results.image_size` contains the input image resolution the detector sees.
             This object might be modified in-place.
         output_height, output_width: the desired output resolution.
-
     Returns:
         Instances: the resized output from the model, based on the output resolution
     """
-    # Change to 'if is_tracing' after PT1.7
-    if isinstance(output_height, torch.Tensor):
+    if isinstance(output_width, torch.Tensor):
+        # This shape might (but not necessarily) be tensors during tracing.
         # Converts integer tensors to float temporaries to ensure true
         # division is performed when computing scale_x and scale_y.
         output_width_tmp = output_width.float()

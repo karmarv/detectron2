@@ -143,21 +143,21 @@ class TestMaskCropPaste(unittest.TestCase):
         for d in [5.0, 10.0, 1000.0]:
             polygon = PolygonMasks([[[0, 0, 0, d, d, d, d, 0]]])
             area = polygon.area()[0]
-            target = d ** 2
+            target = d**2
             self.assertEqual(area, target)
 
         # Draw polygon triangles
         for d in [5.0, 10.0, 1000.0]:
             polygon = PolygonMasks([[[0, 0, 0, d, d, d]]])
             area = polygon.area()[0]
-            target = d ** 2 / 2
+            target = d**2 / 2
             self.assertEqual(area, target)
 
     def test_paste_mask_scriptable(self):
         scripted_f = torch.jit.script(paste_masks_in_image)
         N = 10
         masks = torch.rand(N, 28, 28)
-        boxes = Boxes(random_boxes(N, 100))
+        boxes = Boxes(random_boxes(N, 100)).tensor
         image_shape = (150, 150)
 
         out = paste_masks_in_image(masks, boxes, image_shape)

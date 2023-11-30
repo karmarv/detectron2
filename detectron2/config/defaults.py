@@ -50,6 +50,8 @@ _C.MODEL.PIXEL_STD = [1.0, 1.0, 1.0]
 # INPUT
 # -----------------------------------------------------------------------------
 _C.INPUT = CN()
+# By default, {MIN,MAX}_SIZE options are used in transforms.ResizeShortestEdge.
+# Please refer to ResizeShortestEdge for detailed definition.
 # Size of the smallest side of the image during training
 _C.INPUT.MIN_SIZE_TRAIN = (800,)
 # Sample size of smallest side by choice or random selection from range give by
@@ -217,7 +219,7 @@ _C.MODEL.RPN.IOU_LABELS = [0, -1, 1]
 _C.MODEL.RPN.BATCH_SIZE_PER_IMAGE = 256
 # Target fraction of foreground (positive) examples per RPN minibatch
 _C.MODEL.RPN.POSITIVE_FRACTION = 0.5
-# Options are: "smooth_l1", "giou"
+# Options are: "smooth_l1", "giou", "diou", "ciou"
 _C.MODEL.RPN.BBOX_REG_LOSS_TYPE = "smooth_l1"
 _C.MODEL.RPN.BBOX_REG_LOSS_WEIGHT = 1.0
 # Weights on (dx, dy, dw, dh) for normalizing RPN anchor regression targets
@@ -258,7 +260,7 @@ _C.MODEL.ROI_HEADS.IN_FEATURES = ["res4"]
 # Overlap threshold for an RoI to be considered foreground (if >= IOU_THRESHOLD)
 _C.MODEL.ROI_HEADS.IOU_THRESHOLDS = [0.5]
 _C.MODEL.ROI_HEADS.IOU_LABELS = [0, 1]
-# RoI minibatch size *per image* (number of regions of interest [ROIs])
+# RoI minibatch size *per image* (number of regions of interest [ROIs]) during training
 # Total number of RoIs per training minibatch =
 #   ROI_HEADS.BATCH_SIZE_PER_IMAGE * SOLVER.IMS_PER_BATCH
 # E.g., a common configuration is: 512 * 16 = 8192
@@ -288,7 +290,7 @@ _C.MODEL.ROI_BOX_HEAD = CN()
 # C4 don't use head name option
 # Options for non-C4 models: FastRCNNConvFCHead,
 _C.MODEL.ROI_BOX_HEAD.NAME = ""
-# Options are: "smooth_l1", "giou"
+# Options are: "smooth_l1", "giou", "diou", "ciou"
 _C.MODEL.ROI_BOX_HEAD.BBOX_REG_LOSS_TYPE = "smooth_l1"
 # The final scaling coefficient on the box regression loss, used to balance the magnitude of its
 # gradients with other losses in the model. See also `MODEL.ROI_KEYPOINT_HEAD.LOSS_WEIGHT`.
@@ -316,6 +318,15 @@ _C.MODEL.ROI_BOX_HEAD.NORM = ""
 _C.MODEL.ROI_BOX_HEAD.CLS_AGNOSTIC_BBOX_REG = False
 # If true, RoI heads use bounding boxes predicted by the box head rather than proposal boxes.
 _C.MODEL.ROI_BOX_HEAD.TRAIN_ON_PRED_BOXES = False
+
+# Federated loss can be used to improve the training of LVIS
+_C.MODEL.ROI_BOX_HEAD.USE_FED_LOSS = False
+# Sigmoid cross entrophy is used with federated loss
+_C.MODEL.ROI_BOX_HEAD.USE_SIGMOID_CE = False
+# The power value applied to image_count when calcualting frequency weight
+_C.MODEL.ROI_BOX_HEAD.FED_LOSS_FREQ_WEIGHT_POWER = 0.5
+# Number of classes to keep in total
+_C.MODEL.ROI_BOX_HEAD.FED_LOSS_NUM_CLASSES = 50
 
 # ---------------------------------------------------------------------------- #
 # Cascaded Box Head
@@ -453,7 +464,7 @@ _C.MODEL.RETINANET.BBOX_REG_WEIGHTS = (1.0, 1.0, 1.0, 1.0)
 _C.MODEL.RETINANET.FOCAL_LOSS_GAMMA = 2.0
 _C.MODEL.RETINANET.FOCAL_LOSS_ALPHA = 0.25
 _C.MODEL.RETINANET.SMOOTH_L1_LOSS_BETA = 0.1
-# Options are: "smooth_l1", "giou"
+# Options are: "smooth_l1", "giou", "diou", "ciou"
 _C.MODEL.RETINANET.BBOX_REG_LOSS_TYPE = "smooth_l1"
 
 # One of BN, SyncBN, FrozenBN, GN
@@ -515,6 +526,8 @@ _C.SOLVER.LR_SCHEDULER_NAME = "WarmupMultiStepLR"
 _C.SOLVER.MAX_ITER = 40000
 
 _C.SOLVER.BASE_LR = 0.001
+# The end lr, only used by WarmupCosineLR
+_C.SOLVER.BASE_LR_END = 0.0
 
 _C.SOLVER.MOMENTUM = 0.9
 
@@ -528,10 +541,14 @@ _C.SOLVER.WEIGHT_DECAY_NORM = 0.0
 _C.SOLVER.GAMMA = 0.1
 # The iteration number to decrease learning rate by GAMMA.
 _C.SOLVER.STEPS = (30000,)
+# Number of decays in WarmupStepWithFixedGammaLR schedule
+_C.SOLVER.NUM_DECAYS = 3
 
 _C.SOLVER.WARMUP_FACTOR = 1.0 / 1000
 _C.SOLVER.WARMUP_ITERS = 1000
 _C.SOLVER.WARMUP_METHOD = "linear"
+# Whether to rescale the interval for the learning schedule after warmup
+_C.SOLVER.RESCALE_INTERVAL = False
 
 # Save a checkpoint after every this number of iterations
 _C.SOLVER.CHECKPOINT_PERIOD = 5000
@@ -555,7 +572,7 @@ _C.SOLVER.REFERENCE_WORLD_SIZE = 0
 # changing these and they exist only to reproduce Detectron v1 training if
 # desired.
 _C.SOLVER.BIAS_LR_FACTOR = 1.0
-_C.SOLVER.WEIGHT_DECAY_BIAS = _C.SOLVER.WEIGHT_DECAY
+_C.SOLVER.WEIGHT_DECAY_BIAS = None  # None means following WEIGHT_DECAY
 
 # Gradient clipping
 _C.SOLVER.CLIP_GRADIENTS = CN({"ENABLED": False})

@@ -58,7 +58,7 @@ class VertexFeatureEmbedder(nn.Module):
         """
         return normalize_embeddings(torch.mm(self.features, self.embeddings))
 
-    @torch.no_grad()  # pyre-ignore[56]
+    @torch.no_grad()
     def load(self, fpath: str):
         """
         Load data from a file
@@ -67,7 +67,7 @@ class VertexFeatureEmbedder(nn.Module):
             fpath (str): file path to load data from
         """
         with PathManager.open(fpath, "rb") as hFile:
-            data = pickle.load(hFile)  # pyre-ignore[6]
+            data = pickle.load(hFile)
             for name in ["features", "embeddings"]:
                 if name in data:
                     getattr(self, name).copy_(

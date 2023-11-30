@@ -10,7 +10,6 @@ from fvcore.common.benchmark import benchmark
 from detectron2.layers.rotated_boxes import pairwise_iou_rotated
 from detectron2.structures.boxes import Boxes
 from detectron2.structures.rotated_boxes import RotatedBoxes, pairwise_iou
-from detectron2.utils.env import TORCH_VERSION
 from detectron2.utils.testing import reload_script_model
 
 logger = logging.getLogger(__name__)
@@ -202,8 +201,12 @@ class TestRotatedBoxesStructure(unittest.TestCase):
         # the angle for the box must be within the clip_angle_threshold
         # Note that the clip function will normalize the angle range
         # to be within (-180, 180]
+
         self.assertTrue(
-            torch.all(torch.abs(boxes_5d[:, 4][torch.where(areas_diff < 0)]) < clip_angle_threshold)
+            torch.all(
+                torch.abs(test_boxes_5d.tensor[:, 4][torch.where(areas_diff < 0)])
+                < clip_angle_threshold
+            )
         )
 
     def test_normalize_angles(self):
@@ -369,7 +372,6 @@ class TestRotatedBoxesStructure(unittest.TestCase):
         x = RotatedBoxes.cat([])
         self.assertTrue(x.tensor.shape, (0, 5))
 
-    @unittest.skipIf(TORCH_VERSION < (1, 8), "Insufficient pytorch version")
     def test_scriptability(self):
         def func(x):
             boxes = RotatedBoxes(x)

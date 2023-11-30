@@ -8,12 +8,12 @@ from detectron2.structures import Instances
 from detectron2.structures.boxes import matched_pairwise_iou
 
 
-class DensePoseDataFilter(object):
+class DensePoseDataFilter:
     def __init__(self, cfg: CfgNode):
         self.iou_threshold = cfg.MODEL.ROI_DENSEPOSE_HEAD.FG_IOU_THRESHOLD
         self.keep_masks = cfg.MODEL.ROI_DENSEPOSE_HEAD.COARSE_SEGM_TRAINED_BY_MASKS
 
-    @torch.no_grad()  # pyre-ignore[56]
+    @torch.no_grad()
     def __call__(self, features: List[torch.Tensor], proposals_with_targets: List[Instances]):
         """
         Filters proposals with targets to keep only the ones relevant for

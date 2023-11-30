@@ -4,7 +4,7 @@ import numpy as np
 import torch
 
 
-class PanopticDeepLabTargetGenerator(object):
+class PanopticDeepLabTargetGenerator:
     """
     Generates training targets for Panoptic-DeepLab.
     """
@@ -47,12 +47,12 @@ class PanopticDeepLabTargetGenerator(object):
         x = np.arange(0, size, 1, float)
         y = x[:, np.newaxis]
         x0, y0 = 3 * sigma + 1, 3 * sigma + 1
-        self.g = np.exp(-((x - x0) ** 2 + (y - y0) ** 2) / (2 * sigma ** 2))
+        self.g = np.exp(-((x - x0) ** 2 + (y - y0) ** 2) / (2 * sigma**2))
 
     def __call__(self, panoptic, segments_info):
         """Generates the training target.
         reference: https://github.com/mcordts/cityscapesScripts/blob/master/cityscapesscripts/preparation/createPanopticImgs.py  # noqa
-        reference: https://github.com/facebookresearch/detectron2/blob/master/datasets/prepare_panoptic_fpn.py#L18  # noqa
+        reference: https://github.com/facebookresearch/detectron2/blob/main/datasets/prepare_panoptic_fpn.py#L18  # noqa
 
         Args:
             panoptic: numpy.array, panoptic label, we assume it is already

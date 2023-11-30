@@ -1,7 +1,6 @@
 # Copyright (c) Facebook, Inc. and its affiliates.
 
 import collections
-import contextlib
 import copy
 import functools
 import logging
@@ -112,21 +111,27 @@ def onnx_compatibale_interpolate(
     return interp(input, size, scale_factor, mode, align_corners)
 
 
-@contextlib.contextmanager
 def mock_torch_nn_functional_interpolate():
-    if torch.onnx.is_in_onnx_export():
-        with mock.patch(
-            "torch.nn.functional.interpolate", side_effect=onnx_compatibale_interpolate
-        ):
-            yield
-    else:
-        yield
+    def decorator(func):
+        @functools.wraps(func)
+        def _mock_torch_nn_functional_interpolate(*args, **kwargs):
+            if torch.onnx.is_in_onnx_export():
+                with mock.patch(
+                    "torch.nn.functional.interpolate", side_effect=onnx_compatibale_interpolate
+                ):
+                    return func(*args, **kwargs)
+            else:
+                return func(*args, **kwargs)
+
+        return _mock_torch_nn_functional_interpolate
+
+    return decorator
 
 
 # ==== torch/utils_caffe2/ws_utils.py ==========================================
 
 
-class ScopedWS(object):
+class ScopedWS:
     def __init__(self, ws_name, is_reset, is_cleanup=False):
         self.ws_name = ws_name
         self.is_reset = is_reset
